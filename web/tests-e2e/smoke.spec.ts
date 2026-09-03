@@ -27,6 +27,8 @@ test('登录-建房-双端弹幕闭环', async ({ browser }) => {
   // 观众：从首页点进同一房间
   await login(viewerPage, 'e2e-viewer', 'E2E观众', 'VIEWER');
   await viewerPage.locator('.card', { hasText: roomTitle }).first().click();
+  // 在线人数：WS presence 随进出变化的轻量断言
+  await expect(viewerPage.getByText(/\d+ 人在线/)).toBeVisible();
 
   // 观众发弹幕 → 双端可见（弹幕链路与推流解耦）
   const text = `hello-${Date.now()}`;
