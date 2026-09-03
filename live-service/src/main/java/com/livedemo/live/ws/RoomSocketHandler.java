@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.livedemo.live.chat.ChatMessage;
 import com.livedemo.live.chat.ChatService;
+import com.livedemo.live.room.RoomService;
 import com.livedemo.live.safety.MuteService;
 import com.livedemo.live.safety.RateLimiter;
 import com.livedemo.live.safety.SensitiveWordFilter;
@@ -33,6 +34,7 @@ public class RoomSocketHandler extends TextWebSocketHandler {
     private final MuteService muteService;
     private final RateLimiter rateLimiter;
     private final SensitiveWordFilter wordFilter;
+    private final RoomService roomService;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -41,6 +43,13 @@ public class RoomSocketHandler extends TextWebSocketHandler {
                 (String) session.getAttributes().get(ATTR_USER_ID),
                 (String) session.getAttributes().get(ATTR_NICKNAME)));
         sender.send(session, Map.of("type", "history", "messages", chatService.history(roomId)));
+        // 补发当前房间状态：状态变更事件只在跳变时广播，中途进场的观众若不补发会一直拿不到 LIVING（M6 集成验证发现）
+        try {
+            sender.send(session, Map.of("type", "room_status", "status",
+                    roomService.get(roomId).getStatus().name()));
+        } catch (Exception e) {
+            log.warn("补发房间状态失败: {}", e.getMessage());
+        }
         sender.broadcastPresence(roomId);
     }
 

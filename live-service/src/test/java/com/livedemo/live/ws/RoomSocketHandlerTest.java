@@ -2,6 +2,9 @@ package com.livedemo.live.ws;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.livedemo.live.chat.ChatService;
+import com.livedemo.live.room.Room;
+import com.livedemo.live.room.RoomService;
+import com.livedemo.live.room.RoomStatus;
 import com.livedemo.live.safety.MuteService;
 import com.livedemo.live.safety.RateLimiter;
 import com.livedemo.live.safety.SensitiveWordFilter;
@@ -16,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RoomSocketHandlerTest {
@@ -27,6 +30,7 @@ class RoomSocketHandlerTest {
     private MuteService muteService;
     private RateLimiter rateLimiter;
     private SensitiveWordFilter wordFilter;
+    private RoomService roomService;
     private RoomSocketHandler handler;
 
     private final ObjectMapper om = new ObjectMapper();
@@ -41,7 +45,10 @@ class RoomSocketHandlerTest {
         wordFilter = mock(SensitiveWordFilter.class);
         when(wordFilter.check(any())).thenAnswer(inv ->
                 new SensitiveWordFilter.SafetyResult(false, inv.getArgument(0)));
-        handler = new RoomSocketHandler(registry, sender, chatService, om, muteService, rateLimiter, wordFilter);
+        roomService = mock(RoomService.class);
+        when(roomService.get(anyLong())).thenAnswer(inv -> Room.builder()
+                .id(inv.getArgument(0, Long.class)).status(RoomStatus.IDLE).build());
+        handler = new RoomSocketHandler(registry, sender, chatService, om, muteService, rateLimiter, wordFilter, roomService);
     }
 
     private WebSocketSession session(String id, long roomId, String userId) throws Exception {
@@ -66,6 +73,20 @@ class RoomSocketHandlerTest {
         verify(s, atLeastOnce()).sendMessage(captor.capture());
         List<TextMessage> all = captor.getAllValues();
         return all.get(all.size() - 1).getPayload();
+    }
+
+    @Test
+    void connectSendsHistoryPresenceAndCurrentStatus() throws Exception {
+        WebSocketSession s = session("s1", 1L, "u1");
+        when(roomService.get(1L)).thenReturn(Room.builder().id(1L).status(RoomStatus.LIVING).build());
+
+        handler.afterConnectionEstablished(s);
+
+        ArgumentCaptor<TextMessage> captor = ArgumentCaptor.forClass(TextMessage.class);
+        verify(s, atLeastOnce()).sendMessage(captor.capture());
+        String all = captor.getAllValues().stream().map(TextMessage::getPayload).reduce("", String::concat);
+        assertThat(all).contains("\"type\":\"history\"").contains("\"type\":\"presence\"")
+                .contains("\"type\":\"room_status\"").contains("\"status\":\"LIVING\"");
     }
 
     @Test
