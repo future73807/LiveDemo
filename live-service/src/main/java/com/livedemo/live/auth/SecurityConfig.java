@@ -1,6 +1,7 @@
 package com.livedemo.live.auth;
 
 import com.livedemo.live.config.LiveProps;
+import com.livedemo.live.safety.BanService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class SecurityConfig {
     private final List<AuthProvider> providers;
     private final LiveProps props;
     private final ObjectMapper om;
+    private final BanService banService;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -38,7 +40,7 @@ public class SecurityConfig {
                 .authenticationEntryPoint((req, res, ex) -> write(res, 401, "未认证"))
                 .accessDeniedHandler((req, res, ex) -> write(res, 403, "权限不足")))
             .addFilterBefore(new TokenAuthFilter(providers,
-                            AuthMode.valueOf(props.getAuth().getMode().toUpperCase())),
+                            AuthMode.valueOf(props.getAuth().getMode().toUpperCase()), banService),
                     UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

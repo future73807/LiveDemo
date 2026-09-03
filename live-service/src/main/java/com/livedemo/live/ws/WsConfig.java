@@ -5,6 +5,7 @@ import com.livedemo.live.auth.AuthProvider;
 import com.livedemo.live.auth.AuthUser;
 import com.livedemo.live.auth.InvalidTokenException;
 import com.livedemo.live.config.LiveProps;
+import com.livedemo.live.safety.BanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.server.ServerHttpRequest;
@@ -27,6 +28,7 @@ public class WsConfig implements WebSocketConfigurer {
     private final RoomSocketHandler handler;
     private final List<AuthProvider> providers;
     private final LiveProps props;
+    private final BanService banService;
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
@@ -69,6 +71,7 @@ public class WsConfig implements WebSocketConfigurer {
             attributes.put(RoomSocketHandler.ATTR_ROOM_ID, roomId);
             attributes.put(RoomSocketHandler.ATTR_USER_ID, user.userId());
             attributes.put(RoomSocketHandler.ATTR_NICKNAME, user.nickname());
+            if (banService.isBanned(user.userId())) return false;   // 封禁用户拒绝握手
             return true;
         }
 

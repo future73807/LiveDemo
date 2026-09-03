@@ -1,5 +1,6 @@
 package com.livedemo.live.auth;
 
+import com.livedemo.live.safety.BanService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +18,7 @@ public class TokenAuthFilter extends OncePerRequestFilter {
 
     private final List<AuthProvider> providers;
     private final AuthMode mode;
+    private final BanService banService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -27,6 +29,12 @@ public class TokenAuthFilter extends OncePerRequestFilter {
                     .orElseThrow(() -> new IllegalStateException("未找到 mode=" + mode + " 的 AuthProvider"));
             try {
                 AuthUser user = provider.authenticate(credential);
+                if (banService.isBanned(user.userId())) {
+                    response.setStatus(403);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"code\":\"403\",\"message\":\"账号已被封禁\"}");
+                    return;
+                }
                 request.setAttribute(ATTR, user);
                 // 同步写入 SecurityContext，供 authorizeHttpRequests 的 anyRequest().authenticated() 判定
                 var authorities = user.roles().stream()
