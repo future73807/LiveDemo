@@ -98,18 +98,22 @@ public interface AuthProvider {
 
 ```conf
 http_server { listen 8080; }
-http_api {
-    listen 1985;
-    http_hook {
-        on_publish    http://live-service:8081/api/v1/srs/hooks;
-        on_unpublish  http://live-service:8081/api/v1/srs/hooks;
-    }
-}
+http_api { listen 1985; }
+rtc_server { listen 8000; candidate $CANDIDATE; }
 vhost __defaultVhost__ {
+    # 注意：SRS 5 中回调配置为 http_hooks（复数）且必须置于 vhost 内；
+    # 放在 http_api 内的 http_hook 会被静默忽略
+    http_hooks {
+        enabled         on;
+        on_publish      http://live-service:8081/api/v1/srs/hooks;
+        on_unpublish    http://live-service:8081/api/v1/srs/hooks;
+    }
     rtc { enabled on; rtmp_to_rtc on; }
     hls { enabled on; }
 }
 ```
+
+部署注意：`ossrs/srs:5` 镜像以 `conf/docker.conf` 启动，compose 挂载须覆盖该文件（`./srs/srs.conf:/usr/local/srs/conf/docker.conf`），挂到 `conf/srs.conf` 不会生效。
 
 说明：
 
