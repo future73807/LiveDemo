@@ -31,7 +31,7 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.GET, "/api/rooms", "/api/rooms/*", "/api/rooms/*/play-urls").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/rooms", "/api/rooms/*", "/api/rooms/*/play-urls", "/api/rooms/*/products").permitAll()
                 .requestMatchers("/api/auth/**", "/api/v1/srs/hooks", "/ws").permitAll()
                 .anyRequest().authenticated())
             .exceptionHandling(e -> e
