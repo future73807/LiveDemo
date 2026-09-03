@@ -11,7 +11,8 @@ services:
     environment:
       - CANDIDATE=127.0.0.1   # 本机演示用；公网部署改为服务器公网 IP
     volumes:
-      - ./srs/srs.conf:/usr/local/srs/conf/srs.conf
+      # 镜像默认以 conf/docker.conf 启动（见容器 Cmd），故覆盖该文件而非 srs.conf
+      - ./srs/srs.conf:/usr/local/srs/conf/docker.conf
 
   live-service:
     build: ./live-service
