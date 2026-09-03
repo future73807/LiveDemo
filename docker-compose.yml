@@ -12,3 +12,18 @@ services:
       - CANDIDATE=127.0.0.1   # 本机演示用；公网部署改为服务器公网 IP
     volumes:
       - ./srs/srs.conf:/usr/local/srs/conf/srs.conf
+
+  live-service:
+    build: ./live-service
+    container_name: livedemo-api
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=demo
+      - LIVE_JWT_SECRET=${LIVE_JWT_SECRET:-ZGVtb19kZW1vX2RlbW9fZGVtb19kZW1vX2RlbW8xMjM0NQ==}
+    volumes:
+      - livedemo-data:/app/data
+
+volumes:
+  livedemo-data:
