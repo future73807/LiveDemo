@@ -22,6 +22,7 @@ public class RoomService {
     private final ObjectProvider<PresenceProvider> presenceProvider;
     private final ApplicationEventPublisher events;
     private final LiveProps props;
+    private final ObjectProvider<ShelfCountProvider> shelfCountProvider;
 
     public Room create(String title, AuthUser host) {
         Room room = Room.builder()
@@ -98,6 +99,11 @@ public class RoomService {
     public int viewers(long roomId) {
         PresenceProvider p = presenceProvider.getIfAvailable();
         return p == null ? 0 : p.viewers(roomId);
+    }
+
+    public int productCount(long roomId) {
+        ShelfCountProvider p = shelfCountProvider.getIfAvailable();
+        return p == null ? 0 : p.activeCount(roomId);
     }
 
     private String randomKey() {

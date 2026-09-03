@@ -21,7 +21,10 @@ class RoomServiceTest {
     @SuppressWarnings("unchecked")
     private final ObjectProvider<PresenceProvider> presence = mock(ObjectProvider.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
-    private final RoomService service = new RoomService(repo, presence, events, new LiveProps());
+    private final LiveProps props = new LiveProps();
+    @SuppressWarnings("unchecked")
+    private final ObjectProvider<ShelfCountProvider> shelf = mock(ObjectProvider.class);
+    private final RoomService service = new RoomService(repo, presence, events, props, shelf);
 
     private final AuthUser host = new AuthUser("u1", "主播甲", java.util.Set.of("HOST"));
 

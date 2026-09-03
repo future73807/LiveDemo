@@ -26,32 +26,32 @@ public class RoomController {
                                        @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
         user.requireRole(AuthUser.HOST, AuthUser.ADMIN);
         Room room = service.create(req.title(), user);
-        return ApiResponse.ok(RoomDto.of(room, service.pushUrl(room), true, 0));
+        return ApiResponse.ok(RoomDto.of(room, service.pushUrl(room), true, 0, 0));
     }
 
     @GetMapping
     public ApiResponse<List<RoomDto>> list(@RequestParam(required = false) RoomStatus status) {
         return ApiResponse.ok(service.list(status).stream()
-                .map(r -> RoomDto.of(r, null, false, service.viewers(r.getId())))
+                .map(r -> RoomDto.of(r, null, false, service.viewers(r.getId()), service.productCount(r.getId())))
                 .toList());
     }
 
     @GetMapping("/{id}")
     public ApiResponse<RoomDto> detail(@PathVariable long id) {
         Room room = service.get(id);
-        return ApiResponse.ok(RoomDto.of(room, service.pushUrl(room), false, service.viewers(id)));
+        return ApiResponse.ok(RoomDto.of(room, service.pushUrl(room), false, service.viewers(id), service.productCount(id)));
     }
 
     @PatchMapping("/{id}")
     public ApiResponse<RoomDto> update(@PathVariable long id, @RequestBody UpdateRoomRequest req,
                                        @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
-        return ApiResponse.ok(RoomDto.of(service.update(id, req.title(), user), null, false, 0));
+        return ApiResponse.ok(RoomDto.of(service.update(id, req.title(), user), null, false, 0, 0));
     }
 
     @PostMapping("/{id}/end")
     public ApiResponse<RoomDto> end(@PathVariable long id,
                                     @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
-        return ApiResponse.ok(RoomDto.of(service.end(id, user), null, false, 0));
+        return ApiResponse.ok(RoomDto.of(service.end(id, user), null, false, 0, 0));
     }
 
     @DeleteMapping("/{id}")
