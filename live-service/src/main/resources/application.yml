@@ -31,3 +31,12 @@ live:
 logging:
   level:
     com.livedemo: DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: demo
+logging:
+  level:
+    com.livedemo.live.auth: DEBUG
