@@ -1,0 +1,14 @@
+services:
+  srs:
+    image: ossrs/srs:5
+    container_name: livedemo-srs
+    restart: unless-stopped
+    ports:
+      - "1935:1935"       # RTMP 推流
+      - "1985:1985"       # HTTP API + WebRTC 信令(WHEP)
+      - "8080:8080"       # HTTP-FLV / HLS
+      - "8000:8000/udp"   # WebRTC 媒体
+    environment:
+      - CANDIDATE=127.0.0.1   # 本机演示用；公网部署改为服务器公网 IP
+    volumes:
+      - ./srs/srs.conf:/usr/local/srs/conf/srs.conf
