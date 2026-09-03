@@ -8,6 +8,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class LiveProps {
     private Auth auth = new Auth();
     private Srs srs = new Srs();
+    private Safety safety = new Safety();
+
+    @Data
+    public static class Safety {
+        /** 词库文件路径，支持 classpath: 与文件系统路径 */
+        private String wordsFile = "classpath:sensitive-words.txt";
+        /** replace=掩码 ***；reject=直接拦截 */
+        private String wordAction = "replace";
+    }
 
     @Data
     public static class Auth {

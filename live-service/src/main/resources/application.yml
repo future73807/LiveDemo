@@ -27,6 +27,9 @@ live:
     rtmp-port: 1935
     api-port: 1985
     http-port: 8080
+  safety:
+    words-file: classpath:sensitive-words.txt   # 演示词库，接入期替换为正式词库；支持文件系统路径
+    word-action: replace                        # replace=掩码 ***；reject=直接拦截
 
 logging:
   level:
