@@ -4,6 +4,7 @@ import com.livedemo.live.auth.AuthUser;
 import com.livedemo.live.common.BusinessException;
 import com.livedemo.live.config.LiveProps;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RoomService {
@@ -66,6 +68,16 @@ public class RoomService {
             user.requireRole("ADMIN");
         }
         repo.delete(room);
+    }
+
+    /** 平台后台强制关播（管理员），记录操作人 */
+    public Room forceClose(long id, String operatorId) {
+        Room room = get(id);
+        room.setStatus(RoomStatus.IDLE);
+        Room saved = repo.save(room);
+        events.publishEvent(new RoomStatusChangedEvent(saved.getId(), RoomStatus.IDLE));
+        log.info("房间 {} 已被管理员 {} 强制关播", id, operatorId);
+        return saved;
     }
 
     public Room markLiving(String streamKey) {
