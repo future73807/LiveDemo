@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.livedemo.live.chat.ChatMessage;
 import com.livedemo.live.chat.ChatService;
+import com.livedemo.live.safety.MuteService;
+import com.livedemo.live.safety.RateLimiter;
+import com.livedemo.live.safety.SensitiveWordFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -27,6 +30,9 @@ public class RoomSocketHandler extends TextWebSocketHandler {
     private final WsEventSender sender;
     private final ChatService chatService;
     private final ObjectMapper om;
+    private final MuteService muteService;
+    private final RateLimiter rateLimiter;
+    private final SensitiveWordFilter wordFilter;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -48,6 +54,29 @@ public class RoomSocketHandler extends TextWebSocketHandler {
             if (!"chat".equals(node.path("type").asText())) return;
             String content = node.path("content").asText("").trim();
             if (content.isEmpty()) return;
+
+            // 1. 房间级禁言
+            long remain = muteService.remainingSec(roomId, userId);
+            if (remain > 0) {
+                sender.send(session, Map.of("type", "error", "code", "E_MUTED",
+                        "message", "已被禁言", "durationSec", remain));
+                return;
+            }
+            // 2. 频控（设计 §5.5：5 条/秒）
+            if (!rateLimiter.allow(userId, 5)) {
+                sender.send(session, Map.of("type", "error", "code", "E_RATE_LIMITED",
+                        "message", "发言过于频繁"));
+                return;
+            }
+            // 3. 敏感词（设计 §5.6：replace=掩码放行，reject=拒绝）
+            SensitiveWordFilter.SafetyResult safety = wordFilter.check(content);
+            if (safety.blocked() && wordFilter.isRejectMode()) {
+                sender.send(session, Map.of("type", "error", "code", "E_SENSITIVE",
+                        "message", "消息包含敏感内容"));
+                return;
+            }
+            content = safety.content();
+
             ChatMessage msg = chatService.append(roomId, userId, nickname, content);
             sender.broadcast(roomId, Map.of(
                     "type", "chat",
@@ -67,6 +96,7 @@ public class RoomSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         long roomId = roomId(session);
         registry.remove(roomId, session);
+        rateLimiter.evict((String) session.getAttributes().get(ATTR_USER_ID));   // 防内存泄漏
         sender.broadcastPresence(roomId);
     }
 
