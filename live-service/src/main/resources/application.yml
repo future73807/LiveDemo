@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: live-service
+  datasource:
+    url: jdbc:h2:file:./data/live;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+server:
+  port: 8081
+
+live:
+  auth:
+    mode: jwt                # jwt | gateway
+    jwt:
+      # Base64 的 32 字节密钥（demo 默认值，生产必须通过环境变量覆盖）
+      secret: ${LIVE_JWT_SECRET:ZGVtb19kZW1vX2RlbW9fZGVtb19kZW1vX2RlbW8xMjM0NQ==}
+      # RS256 模式配置后优先生效，例如 https://id.example.com/.well-known/jwks.json
+      jwk-set-uri: ""
+  srs:
+    public-host: localhost
+    rtmp-port: 1935
+    api-port: 1985
+    http-port: 8080
+
+logging:
+  level:
+    com.livedemo: DEBUG
