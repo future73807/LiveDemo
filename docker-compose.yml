@@ -26,5 +26,14 @@ services:
     volumes:
       - livedemo-data:/app/data
 
+  web:
+    build: ./web
+    container_name: livedemo-web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - live-service
+
 volumes:
   livedemo-data:
