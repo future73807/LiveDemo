@@ -1,8 +1,9 @@
 import { http } from './client';
-import type { CartEntry, PlayUrls, Product, Room } from './types';
+import type { AuthUser, CartEntry, PlayUrls, Product, PublishUrls, Room } from './types';
 
 export const authApi = {
   config: () => http.get<{ mode: string; registrationEnabled: boolean }>('/auth/config'),
+  me: () => http.get<AuthUser>('/auth/me'),
   devToken: (userId: string, nickname: string, roles: string[]) =>
     http.post<{ token: string; expiresIn: number }>('/auth/dev-token', { userId, nickname, roles }),
   login: (username: string, password: string) =>
@@ -19,7 +20,8 @@ export const roomsApi = {
   create: (title: string) => http.post<Room>('/rooms', { title }),
   end: (id: number) => http.post<Room>(`/rooms/${id}/end`),
   remove: (id: number) => http.del<void>(`/rooms/${id}`),
-  playUrls: (id: number) => http.get<PlayUrls>(`/rooms/${id}/play-urls`)
+  playUrls: (id: number) => http.get<PlayUrls>(`/rooms/${id}/play-urls`),
+  publishUrls: (id: number) => http.get<PublishUrls>(`/rooms/${id}/publish-urls`)
 };
 
 export const productsApi = {

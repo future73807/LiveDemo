@@ -30,6 +30,10 @@ export interface CartEntry {
 
 export interface PlayUrls { webrtc: string; flv: string; hls: string; }
 
+export interface PublishUrls { whip: string; rtmp: string; streamKey: string; }
+
+export interface AuthUser { userId: string; nickname: string; roles: string[]; }
+
 export interface ChatMessage {
   messageId: string;
   userId: string;

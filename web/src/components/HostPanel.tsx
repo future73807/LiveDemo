@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { productsApi, shelfApi } from '../api/endpoints';
 import type { Product } from '../api/types';
 
-export default function HostPanel({ roomId, onEnd }: { roomId: number; onEnd: () => void }) {
+export default function HostPanel({ roomId }: { roomId: number }) {
   const [mine, setMine] = useState<Product[]>([]);
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
@@ -39,7 +39,6 @@ export default function HostPanel({ roomId, onEnd }: { roomId: number; onEnd: ()
           </div>
         </div>
       ))}
-      <button className="danger" style={{ marginTop: 8 }} onClick={onEnd}>结束直播</button>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import ChatPanel from '../components/ChatPanel';
 import ProductShelf from '../components/ProductShelf';
 import CartDrawer from '../components/CartDrawer';
 import HostPanel from '../components/HostPanel';
+import StudioPanel from '../components/StudioPanel';
 import { useRoomSocket } from '../realtime/useRoomSocket';
 
 export default function RoomPage() {
@@ -81,7 +82,12 @@ export default function RoomPage() {
         <div>
           <Player playUrls={playUrls} status={state.status} />
           <DanmakuLayer messages={state.messages} />
-          {isOwner && <HostPanel roomId={roomId} onEnd={endStream} />}
+          {isOwner && (
+            <>
+              <StudioPanel roomId={roomId} onEnded={endStream} />
+              <HostPanel roomId={roomId} />
+            </>
+          )}
         </div>
 
         <div className="side-panel">
