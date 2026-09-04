@@ -45,9 +45,9 @@ export default function AdminPage() {
 
   return (
     <div className="page">
-      <h2 style={{ marginBottom: 12 }}>平台管理</h2>
+      <h2 style={{ marginBottom: 16 }}>平台管理</h2>
       {error && <div className="error-text" style={{ marginBottom: 8 }}>{error}</div>}
-      <div className="tabs" style={{ marginBottom: 16 }}>
+      <div className="tabs" style={{ marginBottom: 16, borderRadius: 'var(--radius-sm)', border: '1px solid var(--line)' }}>
         <button className={tab === 'rooms' ? 'active' : ''} onClick={() => setTab('rooms')}>房间</button>
         <button className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>商品</button>
         <button className={tab === 'bans' ? 'active' : ''} onClick={() => setTab('bans')}>封禁</button>
@@ -148,9 +148,11 @@ function ProductsTab() {
       <div className="card">
         <h3 style={{ marginBottom: 8 }}>商品库</h3>
         {products.map(p => (
-          <div key={p.id} className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-            <span>{p.title}（￥{p.price}）</span>
-            <div className="row">
+          <div key={p.id} className="row flex-between" style={{ marginBottom: 6 }}>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {p.title}（￥{p.price}）
+            </span>
+            <div className="row" style={{ flex: 'none' }}>
               {editing?.id === p.id ? (
                 <>
                   <input value={editing.price} onChange={e => setEditing({ id: p.id, price: e.target.value })}
@@ -165,7 +167,7 @@ function ProductsTab() {
             </div>
           </div>
         ))}
-        {!products.length && <div className="muted">商品库为空</div>}
+        {!products.length && <div className="empty-hint">商品库为空</div>}
       </div>
     </>
   );

@@ -13,29 +13,31 @@ export default function CartDrawer({ open, entries, onClose, onUpdateQty, onRemo
     <>
       <div className="drawer-mask" onClick={onClose} />
       <div className="drawer">
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+        <div className="drawer-head">
           <h3>购物列表</h3>
-          <button onClick={onClose}>关闭</button>
+          <button className="ghost" onClick={onClose}>关闭</button>
         </div>
-        {!entries.length && <div className="muted">购物车是空的</div>}
+        {!entries.length && <div className="empty-hint"><span className="ph-icon">···</span>购物车是空的</div>}
         {entries.map(e => (
-          <div key={e.itemId} className="card" style={{ marginBottom: 10, padding: 10 }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <div>
-                <div>{e.title}</div>
+          <div key={e.itemId} className="card product-card" style={{ marginBottom: 10 }}>
+            <div className="flex-between">
+              <div style={{ minWidth: 0 }}>
+                <div className="p-title">{e.title}</div>
                 <div className="muted">￥{e.price} × {e.qty}</div>
               </div>
               <div className="row">
-                <button onClick={() => onUpdateQty(e.itemId, e.qty - 1)} disabled={e.qty <= 1}>-</button>
-                <span>{e.qty}</span>
-                <button onClick={() => onUpdateQty(e.itemId, e.qty + 1)}>+</button>
+                <span className="qty-stepper">
+                  <button onClick={() => onUpdateQty(e.itemId, e.qty - 1)} disabled={e.qty <= 1}>-</button>
+                  <span style={{ minWidth: 20, textAlign: 'center' }}>{e.qty}</span>
+                  <button onClick={() => onUpdateQty(e.itemId, e.qty + 1)}>+</button>
+                </span>
                 <button className="danger" onClick={() => onRemove(e.itemId)}>移除</button>
               </div>
             </div>
           </div>
         ))}
-        <div className="row" style={{ justifyContent: 'space-between', borderTop: '1px solid var(--line)', paddingTop: 10 }}>
-          <span>合计</span><span style={{ color: 'var(--danger)' }}>￥{total.toFixed(2)}</span>
+        <div className="drawer-foot">
+          <span>合计</span><span className="total">￥{total.toFixed(2)}</span>
         </div>
       </div>
     </>

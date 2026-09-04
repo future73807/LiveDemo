@@ -80,14 +80,16 @@ export default function StudioPanel({ roomId, onEnded }: { roomId: number; onEnd
     <div className="card studio" style={{ marginTop: 12 }}>
       <h3 style={{ marginBottom: 8 }}>开播台</h3>
       {error && <div className="error-text" style={{ marginBottom: 6 }}>{error}</div>}
-      <div className="studio-preview" style={{ position: 'relative', background: '#000', borderRadius: 8, overflow: 'hidden', aspectRatio: '16/9' }}>
-        <video ref={previewRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      <div className="studio-preview" style={{ position: 'relative', aspectRatio: '16/9' }}>
+        <video ref={previewRef} autoPlay muted playsInline />
         {!publishing && !hasPreview && <div className="player-placeholder">选择设备后点击「预览」</div>}
-        {publishing && <span className="badge living" style={{ position: 'absolute', left: 8, top: 8 }}>直播中 {mmss}</span>}
+        {publishing && <span className="live-timer"><span className="dot" />直播中 {mmss}</span>}
       </div>
       <div className="row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
-        <button onClick={() => setSource('camera')}>摄像头</button>
-        <button onClick={() => setSource('screen')}>共享屏幕</button>
+        <span className="seg-group">
+          <button className={source === 'camera' ? 'on' : ''} onClick={() => setSource('camera')}>摄像头</button>
+          <button className={source === 'screen' ? 'on' : ''} onClick={() => setSource('screen')}>共享屏幕</button>
+        </span>
         <button className="primary" onClick={preview}>预览</button>
       </div>
       {source === 'camera' && (

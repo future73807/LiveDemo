@@ -72,7 +72,7 @@ export default function LoginModal() {
             </select>
           </div>
           {error && <div className="error-text">{error}</div>}
-          <button className="primary" disabled={busy} onClick={submitDevToken} style={{ width: '100%' }}>
+          <button className="primary w-full" disabled={busy} onClick={submitDevToken}>
             {busy ? '登录中…' : '进入'}
           </button>
         </div>
@@ -100,7 +100,7 @@ export default function LoginModal() {
                 onKeyDown={e => { if (e.key === 'Enter') submitLogin(); }} />
             </div>
             {error && <div className="error-text">{error}</div>}
-            <button className="primary" disabled={busy} onClick={submitLogin} style={{ width: '100%' }}>
+            <button className="primary w-full" disabled={busy} onClick={submitLogin}>
               {busy ? '登录中…' : '进入'}
             </button>
           </>
@@ -126,7 +126,7 @@ export default function LoginModal() {
               </select>
             </div>
             {error && <div className="error-text">{error}</div>}
-            <button className="primary" disabled={busy} onClick={submitRegister} style={{ width: '100%' }}>
+            <button className="primary w-full" disabled={busy} onClick={submitRegister}>
               {busy ? '注册中…' : '注册并进入'}
             </button>
           </>
