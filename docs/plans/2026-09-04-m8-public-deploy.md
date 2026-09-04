@@ -24,7 +24,7 @@
 - Modify: `live-service/src/main/resources/application.yml`
 - Test: `live-service/src/test/java/com/livedemo/live/room/PlayUrlsModeTest.java`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `PlayUrlsModeTest.java`（WebEnvironment.RANDOM_PORT + @TestPropertySource 切 base 模式，避免影响其他用例）：
 
@@ -78,9 +78,9 @@ class PlayUrlsModeTest {
 }
 ```
 
-- [ ] **Step 2: 确认失败** → `./scripts/mvn.ps1 test "-Dtest=PlayUrlsModeTest"`（host 模式断言不匹配）。
+- [x] **Step 2: 确认失败** → `./scripts/mvn.ps1 test "-Dtest=PlayUrlsModeTest"`（host 模式断言不匹配）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `LiveProps.Srs` 追加：
 
@@ -122,9 +122,9 @@ class PlayUrlsModeTest {
     public-base-url: ${LIVE_PUBLIC_BASE_URL:}
 ```
 
-- [ ] **Step 4: 全量测试**（预期 53 + 1，Errors 0——host 模式默认值不影响既有用例）。
+- [x] **Step 4: 全量测试**（预期 53 + 1，Errors 0——host 模式默认值不影响既有用例）。
 
-- [ ] **Step 5: Commit** `feat(srs): play-urls base 模式（公网同源地址，消除混合内容）`
+- [x] **Step 5: Commit** `feat(srs): play-urls base 模式（公网同源地址，消除混合内容）`
 
 ---
 
@@ -151,7 +151,7 @@ class PlayUrlsModeTest {
     }
 ```
 
-- [ ] **Step 2: 本地验证**（host 模式 compose 下即可验证反代链路）：
+- [x] **Step 2: 本地验证**（host 模式 compose 下即可验证反代链路）：
 
 ```powershell
 docker compose up -d --build web   # timeout 600000
@@ -175,7 +175,7 @@ curl.exe -s -o NUL -w "%{http_code}" -X POST "http://localhost:3000/rtc/v1/whep/
 - Create: `docs/deploy.md`
 - Modify: `README.md`（部署段指向 deploy.md）
 
-- [ ] **Step 1: docker-compose.yml 终稿调整**
+- [x] **Step 1: docker-compose.yml 终稿调整**
 
 ```yaml
 services:
@@ -223,7 +223,7 @@ volumes:
   livedemo-data:
 ```
 
-- [ ] **Step 2: .env.example**
+- [x] **Step 2: .env.example**
 
 ```bash
 # 复制为 .env 并修改；.env 已被 .gitignore 排除
@@ -241,7 +241,7 @@ LIVE_PUBLIC_BASE_URL=
 
 注意 `.env` 检查：确认根 `.gitignore` 已含 `.env`（M1 Task 0 已加）。
 
-- [ ] **Step 3: docs/deploy.md**（完整两套步骤，直接可执行）
+- [x] **Step 3: docs/deploy.md**（完整两套步骤，直接可执行）
 
 内容要点（写入文档）：
 1. **前置**：域名 A 记录 → 服务器 IP；防火墙/安全组放行 `443/tcp`、`1935/tcp`、`8000/udp`；**不开放** 1985/8080/3000/8081 公网
@@ -263,10 +263,21 @@ LIVE_PUBLIC_BASE_URL=
 
 ### Task 4: 全量回归
 
-- [ ] **Step 1:** `cp .env.example .env`（本地默认值可跑：host 模式 + 默认密钥）→ `docker compose up -d --build`（timeout 600000）→ 三容器 Up。
-- [ ] **Step 2:** 回归三件套：`./scripts/mvn.ps1 test`、`cd web && npm test`、`npm run e2e`（smoke 2 + flows 3 + account ≥2）——全绿。
-- [ ] **Step 3:** 手动反代模拟（可选）：本机用 nginx/caddy 将一个假域名指 3000 验证 WebSocket 透传——如无环境则依赖 Task 2 的 /rtc /live 反代验证 + e2e（已覆盖 /api /ws 链路），在计划文件验证记录注明。
-- [ ] **Step 4:** 计划勾选 + 验证记录；如无代码改动跳过提交。
+- [x] **Step 1:** `cp .env.example .env`（本地默认值可跑：host 模式 + 默认密钥）→ `docker compose up -d --build`（timeout 600000）→ 三容器 Up。
+- [x] **Step 2:** 回归三件套：`./scripts/mvn.ps1 test`、`cd web && npm test`、`npm run e2e`（smoke 2 + flows 3 + account ≥2）——全绿。
+- [x] **Step 3:** 手动反代模拟（可选）：本机用 nginx/caddy 将一个假域名指 3000 验证 WebSocket 透传——如无环境则依赖 Task 2 的 /rtc /live 反代验证 + e2e（已覆盖 /api /ws 链路），在计划文件验证记录注明。
+- [x] **Step 4:** 计划勾选 + 验证记录；如无代码改动跳过提交。
+
+---
+
+## 验证记录（2026-09-04 执行）
+
+- **Task 1**：PlayUrlsModeTest 先红（host 模式输出 `http://localhost:1985/...`）后绿；全量 mvn `Tests run: 55, Failures: 0, Errors: 0`（54 + 1）。偏差：计划示例的 `TestTokens` 实际位于 `com.livedemo.live.auth` 包（import 已修正），并按仓库惯例补 `@ActiveProfiles("demo")`。
+- **Task 2**：重建 web 后，经宿主机 3000 反代 ffprobe `http://localhost:3000/live/room-0ab191d3.flv` 实际输出 `aac`,`h264`（本机无 ffprobe，用 jrottenberg/ffmpeg:6-alpine 容器打 `host.docker.internal:3000`，等价命中宿主机 3000 发布端口）；WHEP `curl.exe POST` 伪 SDP 返回 **502**（非 404），SRS 日志出现 `srs_app_rtc_api.cpp do_serve_http → check_remote_sdp` 处理记录，佐证 `/rtc/` 反代已到达 SRS。
+- **Task 3**：compose 终稿生效（`docker compose config` 实测 host_ip：1985/8080/8081 → 127.0.0.1，1935/8000udp/3000 → 0.0.0.0）；`.gitignore` 已含 `.env`，`.env` 未入库。偏差：计划片段 `${LIVE_PUBLIC_BASE_URL:}` 为非法 compose 插值语法，改为 `${LIVE_PUBLIC_BASE_URL:-}`；`.env.example` 增补 `WEB_BIND`/`SRS_UDP_BIND` 可选注释项。
+- **Task 4 回归**：mvn **55/55 绿**；vitest **6/6 绿**；playwright **7/7 绿**（smoke 2 + flows 3 + account 2）。三容器 Up（livedemo-srs / livedemo-api / livedemo-web），端口绑定收敛生效，e2e 走 3000 反代无影响（仅 flows.spec 直连 `localhost:8081` 打 SRS hook，127.0.0.1 绑定下可达）。
+- **Task 4 Step 3（可选反代模拟）**：本机无 nginx/caddy 假域名环境，未执行；WebSocket 透传由 e2e 的 `/ws` 链路（wss→web nginx→live-service，弹幕用例）与 Task 2 的 `/rtc`/`/live` 反代验证共同覆盖。
+- 提交：`a642359` play-urls base 模式 / `817ff19` web nginx 反代 / `684ce23` deploy 端口收敛与部署文档；计划勾选与验证记录见 `20bfcb5`（本条为补全后的完整记录）。
 
 ---
 
