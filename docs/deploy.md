@@ -2,6 +2,8 @@
 
 目标：把 LiveDemo 部署到一台有公网 IP 的服务器，用域名 + HTTPS 对外提供服务。TLS 证书由宝塔/1Panel 面板的反向代理承担，**容器内不做 TLS**，面板只代理一个端口 `3000`。
 
+> 无备案域名时可直接用 `https://服务器IP` + 自签证书对外服务，见[第 8 节](#8-无备案-ip-直连模式自签-ip-证书)。
+
 流量模型：
 
 ```
@@ -133,6 +135,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST "http://127.0.0.1:3000/rtc/v1/w
 | `docker compose up` 报 `LIVE_JWT_SECRET is required` | `.env` 没填密钥/密码 → 这两个值是必填的防呆设计，填上即可 |
 | 证书续期 | Let's Encrypt 证书由面板自动续期（宝塔/1Panel 均内置定时任务），无需手动处理；续期后面板自动 reload，不用动容器 |
 | 想看容器日志 | `docker compose logs -f api`（后端）、`logs -f srs`（流媒体） |
+| 开播台报"打开设备失败"/摄像头黑屏 | 页面不是 HTTPS 安全上下文（`http://IP` 下 `getUserMedia` 被禁用）→ 改用 `https://服务器IP` 并信任自签证书，或配置域名 |
 
 ## 7. 数据与升级
 
@@ -140,6 +143,58 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST "http://127.0.0.1:3000/rtc/v1/w
 - 弹幕、在线人数为内存态，重启即清空（demo 语义，不持久）。
 - 升级版本：`git pull && docker compose up -d --build`。
 
-## 8. 本地开发
+## 8. 无备案 IP 直连模式（自签 IP 证书）
+
+没有备案域名时，可以直接用 `https://服务器IP` 对外提供服务。正规 CA 不给裸 IP 签发免费证书，做法是面板**自签 IP 证书**，代价是访客首次访问需手动信任一次。
+
+### 8.1 安全上下文约束（先读）
+
+浏览器只在 **HTTPS 安全上下文**开放以下能力，`http://IP` 页面下直接禁用：
+
+| 能力 | API | 受限影响 |
+|---|---|---|
+| 摄像头/麦克风 | `getUserMedia` | 网页开播台不可用 |
+| 屏幕共享 | `getDisplayMedia` | 同上 |
+| WebRTC 收发 | `RTCPeerConnection`（WHIP 推流 / WHEP 看播） | 网页开播与低延迟看播不可用 |
+
+HTTP-FLV 兜底不受证书影响：`http://IP/live/...` 在普通 http 页面可用，弹幕 WebSocket 经 `ws://` 也可用——**不信任证书的观众走 `http://服务器IP:3000` 仍能看 FLV 画面、发弹幕**，只是没有低延迟 WebRTC 链路和开播能力。
+
+### 8.2 自签证书
+
+1Panel：「网站 → 证书 → 自签证书」（或 openssl 生成后以「其他证书/自定义证书」导入），签发对象填服务器公网 IP，绑定到站点 443。**不要开「强制 HTTPS」**——保留 http 入口给不信任证书的观众走 FLV 兜底。
+
+openssl 生成（CN 与 SAN 都填公网 IP，浏览器只校验 SAN）：
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+  -keyout ip.key -out ip.crt \
+  -subj "/CN=203.0.113.10" -addext "subjectAltName=IP:203.0.113.10"
+```
+
+把 `ip.crt`/`ip.key` 粘贴进面板证书配置；站点反代目标仍是 `http://127.0.0.1:3000`，WebSocket 三行、端口放行（443/tcp、1935/tcp、8000/udp）与第 3/4 节完全一致。
+
+### 8.3 `.env` 差异
+
+```bash
+SRS_CANDIDATE=203.0.113.10                  # 公网 IP，与域名模式相同
+LIVE_PLAY_URL_MODE=base
+LIVE_PUBLIC_BASE_URL=https://203.0.113.10   # 注意是 https://IP，让 FLV/WHEP 地址同源走 443
+```
+
+> base 模式下页面拿到的播放地址全部是 `https://IP/...`，无混合内容告警；面板 443 站点同时承接页面、API、WS、`/rtc`、`/live` 反代。
+
+### 8.4 访客体验与到期备份
+
+1. 首次打开 `https://服务器IP` → 浏览器提示"您的连接不是私密连接" → 点「高级 → 继续前往」一次即可，之后该浏览器正常访问（每个浏览器各信任一次）。
+2. 主播进自己房间页 → 开播台「预览」→「开始直播」即可网页开播（WHIP，零配置）；OBS RTMP 通道照常可用。
+3. 不信任证书的观众：打开 `http://服务器IP:3000`，走 FLV 播放入口观看。
+4. **到期备份**：按月付费的临时服务器到期前，导出 `.env`（JWT 密钥/管理员密码）与数据卷：
+
+   ```bash
+   docker run --rm -v livedemo-data:/data -v "$PWD":/backup alpine \
+     tar czf /backup/livedemo-data.tgz /data
+   ```
+
+## 9. 本地开发
 
 本地不需要域名与 TLS：保持 `.env` 中 `LIVE_PLAY_URL_MODE=host`（或干脆不建 `.env`，但此时需在 shell 里提供 JWT 密钥与管理员密码），播放地址按 `localhost:端口` 拼装，行为与 M7 之前完全一致。
