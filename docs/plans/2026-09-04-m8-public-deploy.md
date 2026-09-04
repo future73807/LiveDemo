@@ -133,7 +133,7 @@ class PlayUrlsModeTest {
 **Files:**
 - Modify: `web/nginx.conf`（追加两个 location）
 
-- [ ] **Step 1: 追加 location（置于 /api 与 /ws 之间）**
+- [x] **Step 1: 追加 location（置于 /api 与 /ws 之间）**
 
 ```nginx
     # WHEP 信令反代（base 模式播放地址为同源 /rtc/...）
@@ -163,7 +163,7 @@ curl.exe -s -o NUL -w "%{http_code}" -X POST "http://localhost:3000/rtc/v1/whep/
 
 预期：WHEP 反代返回非 404（M1 已知非法 SDP 可能空回复/断连，以 SRS 日志出现处理记录为准）；ffprobe 经 `http://localhost:3000/live/<key>.flv` 从宿主机验证输出 `aac`,`h264`（3000 对宿主机开放，容器间 web 可达 srs）。
 
-- [ ] **Step 3: Commit** `feat(web): nginx 反代 /rtc /live（同源播放地址链路）`
+- [x] **Step 3: Commit** `feat(web): nginx 反代 /rtc /live（同源播放地址链路）`
 
 ---
 
@@ -257,7 +257,7 @@ LIVE_PUBLIC_BASE_URL=
 6. **常见问题**：WebRTC 黑屏 → 检查 CANDIDATE 与 8000/udp；弹幕连不上 → 反代未开 WebSocket；证书续期由面板自动处理
 7. **数据**：房间/商品存 H2 卷 `livedemo-data`；弹幕与在线人数不持久（demo 语义）
 
-- [ ] **Step 4: README 部署段**追加一行指向 `docs/deploy.md`；Commit `feat(deploy): 端口收敛/.env 化与宝塔、1Panel 部署文档`
+- [x] **Step 4: README 部署段**追加一行指向 `docs/deploy.md`；Commit `feat(deploy): 端口收敛/.env 化与宝塔、1Panel 部署文档`
 
 ---
 
