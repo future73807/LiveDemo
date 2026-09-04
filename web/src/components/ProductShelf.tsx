@@ -1,23 +1,32 @@
 import type { Product } from '../api/types';
 
-export default function ProductShelf({ products, onAdd }: {
+/** 商品卡：有详情链接则整卡直达（新标签页打开），无链接仅展示 */
+function ProductCard({ p }: { p: Product }) {
+  const body = (
+    <>
+      {p.imageUrl
+        ? <img className="p-img" src={p.imageUrl} alt="" loading="lazy" />
+        : <span className="p-ph">{p.title.slice(0, 1)}</span>}
+      <div className="p-info">
+        <div className="p-title">{p.title}</div>
+        <div className="p-price">￥{p.price}</div>
+      </div>
+      {p.detailUrl && <span className="p-go">查看</span>}
+    </>
+  );
+  const cls = 'product-card';
+  return p.detailUrl
+    ? <a className={cls} href={p.detailUrl} target="_blank" rel="noopener noreferrer">{body}</a>
+    : <div className={cls}>{body}</div>;
+}
+
+export default function ProductShelf({ products }: {
   products: Product[];
-  onAdd: (product: Product) => void;
 }) {
-  if (!products.length) return <div className="empty-hint"><span className="ph-icon">···</span>主播暂未上架商品</div>;
+  if (!products.length) return <div className="empty-hint">主播暂未上架商品</div>;
   return (
-    <div style={{ overflowY: 'auto', flex: 1, padding: 12 }}>
-      {products.map(p => (
-        <div key={p.id} className="card product-card" style={{ marginBottom: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <div style={{ minWidth: 0 }}>
-              <div className="p-title">{p.title}</div>
-              <div className="p-price">￥{p.price}</div>
-            </div>
-            <button className="primary" style={{ flex: 'none' }} onClick={() => onAdd(p)}>加购</button>
-          </div>
-        </div>
-      ))}
+    <div className="shelf-list">
+      {products.map(p => <ProductCard key={p.id} p={p} />)}
     </div>
   );
 }

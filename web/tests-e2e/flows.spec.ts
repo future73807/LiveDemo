@@ -62,11 +62,11 @@ async function createRoom(page: Page): Promise<{ title: string; streamKey: strin
   const streamKey = (await (await createRespPromise).json()).data.streamKey;
   if (!streamKey) throw new Error('创建房间 API 未返回推流码');
   await page.getByRole('button', { name: '进入直播间' }).click();
-  await expect(page.locator('.studio')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.meeting')).toBeVisible({ timeout: 15_000 });
   return { title, streamKey };
 }
 
-test('完整直播闭环：推流-出画-弹幕-商品-购物车-禁言-删除-结束', async ({ browser }) => {
+test('完整直播闭环：推流-出画-弹幕-商品直达-禁言-删除-结束', async ({ browser }) => {
   test.setTimeout(300_000);
   const ts = Date.now();
   const hostCtx = await browser.newContext();
@@ -105,34 +105,28 @@ test('完整直播闭环：推流-出画-弹幕-商品-购物车-禁言-删除-�
     await expect(viewerPage.locator('.chat-item', { hasText: textA })).toBeVisible();
     await expect(hostPage.locator('.danmaku-item', { hasText: textA })).toBeVisible({ timeout: 10_000 });
 
-    // ── 商品：管理员平台库建品 → 主播选品挂载 → 观众端 product_update 实时可见 ──
+    // ── 商品：管理员平台库建品 → 主播选品挂载 → 观众端实时可见、整卡直达详情链接 ──
     // （M9 起商品收归平台库：POST /api/products 仅 ADMIN，主播端改为选品挂载面板）
     const adminToken = await apiToken(hostPage.request, `e2e-flow-admin-${ts}`, 'ADMIN');
+    const detailUrl = `https://example.com/p/${ts}`;
     const createResp = await hostPage.request.post('/api/products', {
       headers: { Authorization: `Bearer ${adminToken}` },
-      data: { title: productName, price: 9.9 }
+      data: { title: productName, price: 9.9, detailUrl }
     });
     if (!createResp.ok()) throw new Error(`平台建品失败: ${createResp.status()}`);
+    // 选品收进主播侧栏的「选品」Tab：先切 Tab 再搜索挂载
+    await hostPage.locator('.side-panel .tabs').getByRole('button', { name: '选品' }).click();
     await hostPage.getByPlaceholder('搜索商品').fill(productName);
     await hostPage.locator('.row', { hasText: productName })
       .getByRole('button', { name: '挂载', exact: true }).first().click();
+    // 挂载完成，切回「聊天」Tab（后续弹幕/禁言断言都依赖聊天列表在渲染中）
+    await hostPage.locator('.side-panel .tabs').getByRole('button', { name: '聊天' }).click();
     await viewerPage.getByRole('button', { name: /商品/ }).click();
-    await expect(viewerPage.locator('.card', { hasText: productName })).toBeVisible({ timeout: 10_000 });
-
-    // ── 购物车：加购 → 角标 → 抽屉 → 改数量 → 移除 ──
-    await viewerPage.getByRole('button', { name: '加购' }).click();
-    const cartBtn = viewerPage.getByRole('button', { name: /购物车/ });
-    await expect(cartBtn).toHaveText(/购物车\(1\)/);
-    await cartBtn.click();
-    const entry = viewerPage.locator('.drawer .card', { hasText: productName });
-    await expect(entry).toBeVisible();
-    await entry.getByRole('button', { name: '+' }).click();
-    await expect(cartBtn).toHaveText(/购物车\(2\)/);
-    await entry.getByRole('button', { name: '移除' }).click();
-    await expect(viewerPage.locator('.drawer')).toContainText('购物车是空的');
-    await expect(cartBtn).not.toHaveText(/\(\d+\)/);
-    // 抽屉带全屏遮罩，必须先关闭才能继续操作页面其余部分
-    await viewerPage.getByRole('button', { name: '关闭' }).click();
+    const productLink = viewerPage.locator('.product-card', { hasText: productName });
+    await expect(productLink).toBeVisible({ timeout: 10_000 });
+    // 购物车已移除：商品整卡直达详情链接（新标签页打开）
+    await expect(productLink).toHaveAttribute('href', detailUrl);
+    await expect(productLink).toHaveAttribute('target', '_blank');
 
     // 回到聊天 Tab
     await viewerPage.getByRole('button', { name: '聊天' }).click();

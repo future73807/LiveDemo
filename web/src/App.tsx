@@ -55,6 +55,13 @@ function Topbar() {
 function Gate({ children }: { children: React.ReactNode }) {
   const { user, isEmbed, adoptToken } = useAuth();
 
+  // 嵌入模式标记落到 body：CSS 据此把直播间铺满 iframe 视口（无顶栏）
+  useEffect(() => {
+    if (isEmbed) document.body.dataset.embed = '1';
+    else delete document.body.dataset.embed;
+    return () => { delete document.body.dataset.embed; };
+  }, [isEmbed]);
+
   // 嵌入 postMessage 双通道（设计 §11-D）：父页发 livedemo-auth 注入登录态
   useEffect(() => {
     if (!isEmbed) return;

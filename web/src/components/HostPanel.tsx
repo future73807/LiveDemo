@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { productsApi, shelfApi } from '../api/endpoints';
 import type { Product } from '../api/types';
 
+/** 主播选品挂载：平台商品库 → 挂到本房间小黄车（侧栏选品 Tab 内） */
 export default function HostPanel({ roomId }: { roomId: number }) {
   const [mounted, setMounted] = useState<Product[]>([]);
   const [library, setLibrary] = useState<Product[]>([]);
@@ -31,27 +32,22 @@ export default function HostPanel({ roomId }: { roomId: number }) {
   const filtered = library.filter(p => !kw || p.title.includes(kw));
 
   return (
-    <div className="card" style={{ marginTop: 12 }}>
-      <h3 style={{ marginBottom: 8 }}>选品挂载</h3>
+    <div className="host-shelf">
       {error && <div className="error-text">{error}</div>}
       <div className="section-label">已挂载（点击摘除）</div>
       {mounted.map(p => (
-        <div key={p.id} className="row flex-between" style={{ marginBottom: 6 }}>
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {p.title}（￥{p.price}）
-          </span>
-          <button className="danger" style={{ flex: 'none' }} onClick={() => shelfApi.unmount(roomId, p.id).then(refresh)}>摘除</button>
+        <div key={p.id} className="row flex-between shelf-row">
+          <span className="shelf-title">{p.title}（￥{p.price}）</span>
+          <button className="danger" onClick={() => shelfApi.unmount(roomId, p.id).then(refresh)}>摘除</button>
         </div>
       ))}
-      {!mounted.length && <div className="muted" style={{ fontSize: 13 }}>暂未挂载商品</div>}
+      {!mounted.length && <div className="muted shelf-empty">暂未挂载商品</div>}
       <div className="section-label">平台商品库</div>
-      <input value={kw} onChange={e => setKw(e.target.value)} placeholder="搜索商品" style={{ width: '100%', marginBottom: 8 }} />
+      <input value={kw} onChange={e => setKw(e.target.value)} placeholder="搜索商品" className="w-full" />
       {filtered.map(p => (
-        <div key={p.id} className="row flex-between" style={{ marginBottom: 6 }}>
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {p.title}（￥{p.price}）
-          </span>
-          <button className="primary" style={{ flex: 'none' }} disabled={mountedIds.has(p.id)}
+        <div key={p.id} className="row flex-between shelf-row">
+          <span className="shelf-title">{p.title}（￥{p.price}）</span>
+          <button className="primary" disabled={mountedIds.has(p.id)}
             onClick={() => shelfApi.mount(roomId, p.id).then(refresh)}>
             {mountedIds.has(p.id) ? '已挂载' : '挂载'}
           </button>

@@ -1,5 +1,5 @@
 import { http } from './client';
-import type { AuthUser, CartEntry, PlayUrls, Product, PublishUrls, Room } from './types';
+import type { AuthUser, PlayUrls, Product, PublishUrls, Room } from './types';
 
 export const authApi = {
   config: () => http.get<{ mode: string; registrationEnabled: boolean }>('/auth/config'),
@@ -40,14 +40,6 @@ export const shelfApi = {
     http.post<void>(`/rooms/${roomId}/products`, { productId, sort }),
   unmount: (roomId: number, productId: number) =>
     http.del<void>(`/rooms/${roomId}/products/${productId}`)
-};
-
-export const cartApi = {
-  list: () => http.get<CartEntry[]>('/cart'),
-  add: (productId: number, qty = 1, roomId?: number) =>
-    http.post<CartEntry>('/cart/items', { productId, qty, roomId }),
-  updateQty: (itemId: number, qty: number) => http.patch<CartEntry>(`/cart/items/${itemId}`, { qty }),
-  remove: (itemId: number) => http.del<void>(`/cart/items/${itemId}`)
 };
 
 export const moderationApi = {

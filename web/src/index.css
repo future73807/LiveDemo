@@ -289,7 +289,7 @@ input::placeholder { color: var(--muted); opacity: .7; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes pop-in { from { opacity: 0; transform: scale(.94) translateY(8px); } }
 
-/* ---------- 直播间（B 站式：左播放器主区 + 右侧信息栏，等高） ---------- */
+/* ---------- 直播间（B 站式布局 + 腾讯会议式开播）：单屏应用壳，页面不滚动 ---------- */
 /* 直播间背景：顶部氛围带，随主题换色（全站唯一渐变，勿删） */
 body:has(.room-page) {
   background:
@@ -297,30 +297,38 @@ body:has(.room-page) {
       top / 100% min(52vh, 460px) no-repeat,
     var(--bg);
 }
-.room-page { padding-bottom: 24px; }
+.room-page {
+  height: calc(100dvh - var(--topbar-h));
+  display: flex; flex-direction: column;
+  max-width: none;
+  padding: 0 14px 14px;
+  overflow: hidden;
+}
+body[data-embed] .room-page { height: 100dvh; }   /* 嵌入模式无顶栏，铺满 iframe */
 .room-header {
+  flex: none;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  margin-bottom: 14px;
+  margin: 12px 0;
 }
 .room-header button { flex: none; }
 .room-title { min-width: 0; }
 .room-title h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .room-main {
+  flex: 1; min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
-  grid-template-rows: auto 1fr;
   gap: 0 14px;
   align-items: stretch;
 }
 .player-stage {
-  grid-column: 1; grid-row: 1;
   position: relative;
+  min-width: 0; min-height: 0;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: #000;
   box-shadow: var(--shadow-sm);
 }
-.player-box { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.player-box { position: relative; width: 100%; height: 100%; background: #000; }
 .player-box video { width: 100%; height: 100%; object-fit: contain; }
 .player-placeholder {
   position: absolute; inset: 0;
@@ -333,24 +341,19 @@ body:has(.room-page) {
     #000;
 }
 .player-placeholder .ph-icon { font-size: 20px; font-weight: 800; letter-spacing: 3px; opacity: .4; }
-.host-tools { grid-column: 1; grid-row: 2; min-width: 0; margin-top: 14px; }
 .side-panel {
-  grid-column: 2; grid-row: 1 / 3;
   display: flex; flex-direction: column;
   min-height: 0; min-width: 0;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  overflow: hidden auto;
+  overflow: hidden;
 }
-.tabs {
-  display: flex; border-bottom: 1px solid var(--line); flex: none;
-  position: sticky; top: 0; background: var(--panel); z-index: 2;
-}
+.tabs { display: flex; border-bottom: 1px solid var(--line); flex: none; }
 .tabs button {
   flex: 1; border: none; background: transparent; border-radius: 0;
   padding: 12px 8px; color: var(--muted); font-weight: 500;
-  position: relative;
+  position: relative; white-space: nowrap;
 }
 .tabs button:hover { color: var(--accent); background: transparent; }
 .tabs button.active { color: var(--accent); background: transparent; }
@@ -360,6 +363,45 @@ body:has(.room-page) {
   width: 32px; height: 3px; border-radius: 3px 3px 0 0;
   background: var(--accent);
 }
+.panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+
+/* 商品小黄车：整卡直达详情链接 */
+.shelf-list { display: flex; flex-direction: column; gap: 8px; }
+.product-card {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  color: var(--text); text-decoration: none;
+  transition: border-color .15s;
+}
+.product-card:hover { border-color: var(--accent); }
+a.product-card:hover .p-go { background: var(--accent); color: #fff; }
+.p-img { width: 56px; height: 42px; object-fit: cover; border-radius: 6px; flex: none; }
+.p-ph {
+  width: 56px; height: 42px; border-radius: 6px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel-3); color: var(--muted); font-weight: 700;
+}
+.p-info { min-width: 0; flex: 1; }
+.product-card .p-title {
+  font-size: 14px; color: var(--text-strong); line-height: 1.45;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.product-card .p-price { color: var(--danger); font-weight: 700; font-size: 15px; }
+.p-go {
+  flex: none; color: var(--accent); font-size: 12px;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line);
+}
+
+/* 主播选品面板（侧栏选品 Tab） */
+.host-shelf { display: flex; flex-direction: column; gap: 6px; }
+.host-shelf input { margin-bottom: 6px; }
+.shelf-row { min-width: 0; }
+.shelf-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shelf-empty { font-size: 13px; }
 .chat-list { flex: 1; overflow-y: auto; padding: 10px 12px; min-height: 0; }
 .chat-item { margin-bottom: 9px; word-break: break-all; line-height: 1.55; font-size: 14px; }
 .chat-item .nick { color: var(--accent); margin-right: 6px; font-weight: 600; }
@@ -383,63 +425,39 @@ body:has(.room-page) {
   to { transform: translateX(-100%); }
 }
 
-/* ---------- 抽屉 ---------- */
-.drawer-mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); backdrop-filter: blur(2px); z-index: 40; animation: fade-in .18s ease; }
-.drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 380px; max-width: 92vw;
-  background: var(--panel); border-left: 1px solid var(--line);
-  padding: 18px; overflow-y: auto; z-index: 41; box-shadow: var(--shadow);
-  animation: slide-in .22s cubic-bezier(.2, .8, .3, 1);
-  display: flex; flex-direction: column;
+/* ---------- 会议式开播工具条（悬浮于播放器底部） ---------- */
+.meeting-toolbar {
+  position: absolute; left: 50%; bottom: 14px;
+  transform: translateX(-50%);
+  display: flex; gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(10, 12, 18, .72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 6;
 }
-@keyframes slide-in { from { transform: translateX(40px); opacity: 0; } }
-.drawer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex: none; }
-.drawer-foot {
-  margin-top: auto; padding-top: 12px;
-  border-top: 1px solid var(--line);
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 15px;
+.meeting-toolbar button {
+  background: transparent; border: none; color: #fff;
+  padding: 7px 14px; border-radius: 8px; font-size: 13px;
 }
-.drawer-foot .total { color: var(--danger); font-size: 18px; font-weight: 700; }
-
-/* ---------- 商品卡（侧栏/购物车通用） ---------- */
-.product-card {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  transition: border-color .15s;
-}
-.product-card:hover { border-color: var(--accent); }
-.product-card .p-title { font-size: 14px; color: var(--text-strong); line-height: 1.45; }
-.product-card .p-price { color: var(--danger); font-weight: 700; font-size: 15px; }
- qty-stepper { display: inline-flex; align-items: center; gap: 2px; }
- qty-stepper button {
-  width: 26px; height: 26px; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 15px; border-radius: 7px;
+.meeting-toolbar button:hover { background: rgba(255, 255, 255, .16); color: #fff; }
+.meeting-toolbar button.on { background: rgba(255, 255, 255, .16); }
+.meeting-toolbar button.warn { color: var(--warn); }
+.meeting-toolbar button.off { opacity: .4; }
+.meeting-toolbar button.danger { background: var(--danger); color: #fff; }
+.meeting-toolbar button.danger:hover { background: #ff6b7a; color: #fff; }
+.meeting-error {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 7; max-width: 90%;
+  background: rgba(0, 0, 0, .7); color: #ffb3bc;
+  padding: 4px 12px; border-radius: 8px; font-size: 12px;
 }
 
 table.list { width: 100%; border-collapse: collapse; }
 table.list th, table.list td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
 table.list th { color: var(--muted); font-weight: 500; font-size: 13px; }
 table.list tr:hover td { background: var(--panel-2); }
-
-/* ---------- 开播台 ---------- */
-.studio-preview { background: #000; border-radius: var(--radius); overflow: hidden; }
-.studio-preview video { width: 100%; height: 100%; object-fit: contain; display: block; }
-.live-timer {
-  position: absolute; left: 8px; top: 8px;
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 10px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; color: #fff;
-  background: var(--live);
-}
-.live-timer .dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: pulse 1.4s ease-in-out infinite; }
-.seg-group { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
-.seg-group button { border: none; border-radius: 0; background: var(--panel-2); }
-.seg-group button + button { border-left: 1px solid var(--line); }
-.seg-group button.on { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
 
 /* ---------- 通用工具类 ---------- */
 .mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; }
@@ -464,25 +482,21 @@ table.list tr:hover td { background: var(--panel-2); }
   .topbar button { padding: 6px 12px; }
   .danmaku-item { font-size: 14px; }
   .dialog { width: 100%; padding: 20px 16px; }
-  .drawer { width: 100vw; max-width: 100vw; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
 
-  /* 房间页：头部 + 播放器（全宽）+ 聊天/商品 Tab 占满剩余高度 */
-  .room-page {
-    display: flex; flex-direction: column;
-    max-width: none; padding: 0;
-    min-height: calc(100dvh - var(--topbar-h));
-  }
+  /* 房间页：单屏应用壳——头部 + 播放器（16:9 全宽）+ 侧栏占满剩余高度，页面不滚动 */
+  .room-page { padding: 0; }
   .room-header {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 8px 12px; flex: none;
+    padding: 8px 12px; flex: none; margin: 0;
   }
   .room-header h2 { font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .room-main { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
-  .player-stage { border-radius: 0; flex: none; box-shadow: none; }
-  .host-tools { padding: 10px 12px; margin-top: 0; }
-  .side-panel { flex: 1; min-height: 320px; border-radius: var(--radius-lg) var(--radius-lg) 0 0; border-bottom: none; }
+  .room-main { display: flex; flex-direction: column; gap: 0; }
+  .player-stage { border-radius: 0; flex: none; box-shadow: none; aspect-ratio: 16 / 9; }
+  .side-panel { flex: 1; min-height: 0; border-radius: 0; border-left: none; border-right: none; border-bottom: none; }
+  .panel-body { padding: 10px 12px; }
   .chat-input { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-  .studio select { max-width: 46%; }
+  .meeting-toolbar { bottom: 8px; gap: 4px; padding: 4px; }
+  .meeting-toolbar button { padding: 6px 9px; font-size: 12px; }
   .room-card .cover .play-hint { display: none; }   /* 触屏无 hover，隐藏悬浮播放按钮 */
 }
 

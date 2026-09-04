@@ -38,8 +38,13 @@ test('移动视口 375×667：房间页无横向滚动且播放器可见', async
   await page.goto(`/rooms/${roomId}`);
   await expect(page.locator('.player-box')).toBeVisible({ timeout: 15_000 });
 
-  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-  expect(scrollWidth, '375 视口下不得出现横向滚动').toBeLessThanOrEqual(375);
+  const geom = await page.evaluate(() => ({
+    scrollW: document.documentElement.scrollWidth,
+    scrollH: document.documentElement.scrollHeight,
+    innerH: window.innerHeight
+  }));
+  expect(geom.scrollW, '375 视口下不得出现横向滚动').toBeLessThanOrEqual(375);
+  expect(geom.scrollH, '房间页必须单屏，无纵向滚动').toBeLessThanOrEqual(geom.innerH + 1);
 });
 
 test('嵌入模式：URL token 免登录 + postMessage ready/room-status 双通道', async ({ page, request }) => {
@@ -72,7 +77,7 @@ test('嵌入模式：URL token 免登录 + postMessage ready/room-status 双通�
     }
   });
 </script>
-<iframe src="http://localhost:3000/rooms/${roomId}?token=${hostToken}&embed=1" style="width:1100px;height:700px"></iframe>
+<iframe src="${process.env.E2E_BASE_URL ?? 'http://localhost:3000'}/rooms/${roomId}?token=${hostToken}&embed=1" style="width:1100px;height:700px"></iframe>
 </body></html>`
   }));
   await page.goto('/embed-host.html');

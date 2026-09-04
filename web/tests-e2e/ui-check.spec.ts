@@ -36,7 +36,7 @@ test('主题切换与布局等高断言', async ({ page, request }) => {
   expect(toggled).not.toBe(initial);
   await page.locator('.topbar .theme-toggle').click();
 
-  // 2) 桌面直播间：侧栏顶/底与播放器区域对齐（B 站式等高），无横向滚动
+  // 2) 桌面直播间：侧栏顶/底与播放器区域对齐（B 站式等高），页面单屏不滚动（无横向/纵向页面级滚动）
   await page.goto(`/rooms/${room.id}`);
   await expect(page.locator('.player-box')).toBeVisible({ timeout: 15_000 });
   const geom = await page.evaluate(() => {
@@ -46,15 +46,18 @@ test('主题切换与布局等高断言', async ({ page, request }) => {
       stageTop: stage.top, stageBottom: stage.bottom,
       sideTop: side.top, sideBottom: side.bottom,
       scrollW: document.documentElement.scrollWidth,
+      scrollH: document.documentElement.scrollHeight,
       innerW: window.innerWidth,
+      innerH: window.innerHeight,
       theme: document.documentElement.dataset.theme
     };
   });
   expect(Math.abs(geom.stageTop - geom.sideTop)).toBeLessThan(2);
   expect(Math.abs(geom.stageBottom - geom.sideBottom)).toBeLessThan(3);   // 16:9 小数像素舍入容差
   expect(geom.scrollW).toBeLessThanOrEqual(geom.innerW);
+  expect(geom.scrollH, '桌面房间页必须单屏，无纵向滚动').toBeLessThanOrEqual(geom.innerH + 1);
 
-  // 3) 移动端房间页：无横向滚动、播放器全宽、侧栏在下方
+  // 3) 移动端房间页：单屏无任何页面级滚动、播放器全宽、侧栏在下方
   await page.setViewportSize({ width: 375, height: 667 });
   await page.waitForTimeout(300);
   const mobile = await page.evaluate(() => {
@@ -62,10 +65,14 @@ test('主题切换与布局等高断言', async ({ page, request }) => {
     const side = document.querySelector('.side-panel')!.getBoundingClientRect();
     return {
       stageW: stage.width, sideTop: side.top, stageBottom: stage.bottom,
-      scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth
+      scrollW: document.documentElement.scrollWidth,
+      scrollH: document.documentElement.scrollHeight,
+      innerW: window.innerWidth,
+      innerH: window.innerHeight
     };
   });
   expect(mobile.scrollW).toBeLessThanOrEqual(375);
+  expect(mobile.scrollH, '移动端房间页必须单屏，无纵向滚动').toBeLessThanOrEqual(mobile.innerH + 1);
   expect(mobile.stageW).toBeCloseTo(375, 0);
   expect(mobile.sideTop).toBeGreaterThanOrEqual(mobile.stageBottom - 1);
 });

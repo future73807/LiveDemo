@@ -3,8 +3,6 @@ export interface Room {
   title: string;
   ownerId: string;
   ownerName: string;
-  streamKey: string | null;
-  pushUrl: string | null;
   status: 'IDLE' | 'LIVING';
   viewerCount: number;
   productCount: number;
@@ -19,18 +17,10 @@ export interface Product {
   detailUrl: string | null;
 }
 
-export interface CartEntry {
-  itemId: number;
-  productId: number;
-  title: string;
-  price: number;
-  imageUrl: string | null;
-  qty: number;
-}
-
 export interface PlayUrls { webrtc: string; flv: string; hls: string; }
 
-export interface PublishUrls { whip: string; rtmp: string; streamKey: string; }
+/** 网页直接开播（WHIP），无推流码/推流服务器概念 */
+export interface PublishUrls { whip: string; }
 
 export interface AuthUser { userId: string; nickname: string; roles: string[]; }
 
