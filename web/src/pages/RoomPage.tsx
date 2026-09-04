@@ -16,7 +16,7 @@ export default function RoomPage() {
   const { id } = useParams();
   const roomId = Number(id);
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isEmbed } = useAuth();
 
   const [room, setRoom] = useState<Room | null>(null);
   const [playUrls, setPlayUrls] = useState<PlayUrls | null>(null);
@@ -42,6 +42,13 @@ export default function RoomPage() {
   useEffect(() => {
     if (state.status === 'LIVING') roomsApi.playUrls(roomId).then(setPlayUrls).catch(() => {});
   }, [roomId, state.status]);
+
+  // 嵌入模式：房间状态变化转发父页（livedemo-room-status）
+  useEffect(() => {
+    if (isEmbed && state.status) {
+      window.parent?.postMessage({ type: 'livedemo-room-status', status: state.status }, '*');
+    }
+  }, [isEmbed, state.status]);
 
   const isOwner = !!user && room?.ownerId === user.userId;
   const canModerate = !!user && (isOwner || isAdmin);
