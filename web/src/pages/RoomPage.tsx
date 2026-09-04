@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cartApi, moderationApi, roomsApi, shelfApi } from '../api/endpoints';
 import type { CartEntry, PlayUrls, Room } from '../api/types';
@@ -27,8 +27,6 @@ export default function RoomPage() {
   const onMuted = useCallback((sec: number) => setNotice(`已被禁言 ${sec} 秒`), []);
   const onError = useCallback((code: string, message: string) => setNotice(`[${code}] ${message}`), []);
   const { state, connected, sendChat } = useRoomSocket(Number.isFinite(roomId) ? roomId : null, { onMuted, onError });
-
-  const deletedIds = useMemo(() => new Set<string>(), []);   // 删除即时从 state 移除，无需额外集合
 
   const refreshCart = useCallback(() => { cartApi.list().then(setCart).catch(() => {}); }, []);
   const cartCount = cart.reduce((sum, e) => sum + e.qty, 0);
@@ -82,7 +80,7 @@ export default function RoomPage() {
       <div className="room-layout">
         <div>
           <Player playUrls={playUrls} status={state.status} />
-          <DanmakuLayer messages={state.messages} deletedIds={deletedIds} />
+          <DanmakuLayer messages={state.messages} />
           {isOwner && <HostPanel roomId={roomId} onEnd={endStream} />}
         </div>
 
