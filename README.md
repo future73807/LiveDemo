@@ -43,12 +43,16 @@
 docker compose up -d --build
 ```
 
+> 首次启动需复制 `.env.example` 为 `.env` 并填写 JWT 密钥与管理员密码（变量缺失会拒绝启动）。
+
 | 服务 | 地址 |
 |---|---|
 | 前端页面 | http://localhost:3000 |
 | live-service API | http://localhost:8081/api |
 | SRS HTTP API | http://localhost:1985 |
 | SRS 播放器测试页 | http://localhost:8080/players/srs_player.html |
+
+公网服务器部署（域名 + HTTPS + 宝塔/1Panel 反代）见 [docs/deploy.md](docs/deploy.md)。
 
 ### 体验流程
 
