@@ -63,3 +63,17 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 
 table.list { width: 100%; border-collapse: collapse; }
 table.list th, table.list td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+
+/* 移动端适配（≤768px） */
+@media (max-width: 768px) {
+  .page { padding: 10px; }
+  .grid { grid-template-columns: 1fr; }
+  .room-layout { grid-template-columns: 1fr; }
+  .side-panel { min-height: 0; height: auto; max-height: 60vh; }
+  .chat-list { max-height: 40vh; }
+  .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .danmaku-item { font-size: 14px; }
+  .dialog { width: 94vw; }
+  .drawer { width: 100vw; }
+  .studio select { max-width: 46%; }
+}
