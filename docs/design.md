@@ -126,7 +126,7 @@ vhost __defaultVhost__ {
 - 推流：`rtmp://{SRS_HOST}:1935/live/{streamKey}`
 - WebRTC 播放（WHEP）：`http://{SRS_HOST}:1985/rtc/v1/whep/?app=live&stream={streamKey}`
 - HTTP-FLV：`http://{SRS_HOST}:8080/live/{streamKey}.flv`
-- HLS：`http://{SRS_HOST}:8080/live/{streamKey}.m3u8`
+- HLS：`http://{SRS_HOST}:8080/live/{streamKey}.m3u8`；公网部署切 `play-url-mode: base`，按 `public-base-url` 发同源地址 `https://{域名}/rtc/...`、`/live/...`（由 web nginx 反代到 SRS，消除混合内容）
 
 `{streamKey}` 由 live-service 生成（`room-{id}-{8位随机}`），是房间与流的关联键。
 
