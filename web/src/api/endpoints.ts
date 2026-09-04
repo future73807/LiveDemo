@@ -25,9 +25,13 @@ export const roomsApi = {
 };
 
 export const productsApi = {
-  mine: () => http.get<Product[]>('/products'),
+  /** 平台商品库全量列表（HOST 选品 / ADMIN 维护） */
+  list: () => http.get<Product[]>('/products'),
   create: (p: { title: string; price: number; imageUrl?: string; detailUrl?: string; stock?: number }) =>
-    http.post<Product>('/products', p)
+    http.post<Product>('/products', p),
+  update: (id: number, p: { title: string; price: number; imageUrl?: string; detailUrl?: string; stock?: number }) =>
+    http.patch<Product>(`/products/${id}`, p),
+  remove: (id: number) => http.del<void>(`/products/${id}`)
 };
 
 export const shelfApi = {
