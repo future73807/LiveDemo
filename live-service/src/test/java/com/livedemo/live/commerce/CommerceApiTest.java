@@ -28,15 +28,19 @@ class CommerceApiTest {
         return tokens.sign(new AuthUser("v1", "观众甲", java.util.Set.of("VIEWER")));
     }
 
+    private String adminToken() {
+        return tokens.sign(new AuthUser("a1", "管理员", java.util.Set.of("ADMIN")));
+    }
+
     @Test
     void fullCommerceFlow() throws Exception {
         String host = hostToken();
-        // 1. 建房间 + 建商品
+        // 1. 建房间（主播）+ 建商品（平台库，仅 ADMIN）
         String roomResp = mvc.perform(post("/api/rooms").header("Authorization", "Bearer " + host)
                         .contentType("application/json").content("{\"title\":\"带货间\"}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         Integer roomId = com.jayway.jsonpath.JsonPath.read(roomResp, "$.data.id");
-        String productResp = mvc.perform(post("/api/products").header("Authorization", "Bearer " + host)
+        String productResp = mvc.perform(post("/api/products").header("Authorization", "Bearer " + adminToken())
                         .contentType("application/json")
                         .content("{\"title\":\"测试卫衣\",\"price\":99.9,\"stock\":10}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

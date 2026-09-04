@@ -19,6 +19,7 @@ import java.util.List;
 public class ProductController {
 
     private final ProductCatalog catalog;
+    private final ShelfService shelfService;
 
     @Data
     public static class CreateProductRequest {
@@ -32,14 +33,33 @@ public class ProductController {
     @PostMapping
     public ApiResponse<Product> create(@RequestBody CreateProductRequest req,
                                        @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
-        user.requireRole(AuthUser.HOST, AuthUser.ADMIN);
+        user.requireRole(AuthUser.ADMIN);
         return ApiResponse.ok(catalog.create(new ProductDraft(req.getTitle(), req.getPrice(),
-                req.getImageUrl(), req.getDetailUrl(), req.getStock()), user.userId()));
+                req.getImageUrl(), req.getDetailUrl(), req.getStock())));
     }
 
+    /** 平台商品库全量列表（主播选品 + 管理端） */
     @GetMapping
-    public ApiResponse<List<Product>> mine(@RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
+    public ApiResponse<List<Product>> list(@RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
         user.requireRole(AuthUser.HOST, AuthUser.ADMIN);
-        return ApiResponse.ok(catalog.listByOwner(user.userId()));
+        return ApiResponse.ok(catalog.list());
+    }
+
+    @PatchMapping("/{id}")
+    public ApiResponse<Product> update(@PathVariable long id, @RequestBody CreateProductRequest req,
+                                       @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
+        user.requireRole(AuthUser.ADMIN);
+        return ApiResponse.ok(catalog.update(id, new ProductDraft(req.getTitle(), req.getPrice(),
+                req.getImageUrl(), req.getDetailUrl(), req.getStock())));
+    }
+
+    /** 删除平台商品：先级联摘除所有在架挂载并广播，再删实体 */
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable long id,
+                                    @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
+        user.requireRole(AuthUser.ADMIN);
+        shelfService.unmountAll(id);
+        catalog.delete(id);
+        return ApiResponse.ok(null);
     }
 }

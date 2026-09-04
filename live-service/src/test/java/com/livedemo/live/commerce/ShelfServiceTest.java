@@ -53,13 +53,19 @@ class ShelfServiceTest {
     }
 
     @Test
-    void mount_otherOwnersProduct_returns403() {
+    void mount_platformProductByAnyHost_succeeds() {
         ownedRoom();
-        when(productRepo.findById(1L)).thenReturn(Optional.of(product(1L, "someone-else")));
-        assertThatThrownBy(() -> service.mount(5L, 1L, 0, host))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getStatus()).isEqualTo(403);
-        verify(shelfRepo, never()).save(any());
+        // 平台库商品（owner=platform）：任意主播均可挂载（M9 平台商品库语义）
+        when(productRepo.findById(1L)).thenReturn(Optional.of(product(1L, "platform")));
+        when(shelfRepo.findByRoomIdAndProductId(5L, 1L)).thenReturn(Optional.empty());
+        when(shelfRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.mount(5L, 1L, 0, host);
+
+        ArgumentCaptor<RoomProduct> captor = ArgumentCaptor.forClass(RoomProduct.class);
+        verify(shelfRepo).save(captor.capture());
+        assertThat(captor.getValue().isActive()).isTrue();
+        verify(sender).broadcast(eq(5L), any());
     }
 
     @Test

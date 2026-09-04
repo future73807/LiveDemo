@@ -6,6 +6,7 @@ import com.livedemo.live.commerce.ProductRepository;
 import com.livedemo.live.commerce.acl.ProductCatalog;
 import com.livedemo.live.commerce.acl.ProductDraft;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -18,9 +19,9 @@ public class LocalProductCatalog implements ProductCatalog {
     private final ProductRepository repo;
 
     @Override
-    public Product create(ProductDraft draft, String ownerId) {
+    public Product create(ProductDraft draft) {
         return repo.save(Product.builder()
-                .ownerId(ownerId)
+                .ownerId("platform")
                 .title(draft.title())
                 .price(draft.price())
                 .imageUrl(draft.imageUrl())
@@ -31,8 +32,24 @@ public class LocalProductCatalog implements ProductCatalog {
     }
 
     @Override
-    public List<Product> listByOwner(String ownerId) {
-        return repo.findByOwnerIdOrderByIdDesc(ownerId);
+    public Product update(long productId, ProductDraft draft) {
+        Product product = get(productId);
+        product.setTitle(draft.title());
+        product.setPrice(draft.price());
+        product.setImageUrl(draft.imageUrl());
+        product.setDetailUrl(draft.detailUrl());
+        product.setStock(draft.stock());
+        return repo.save(product);
+    }
+
+    @Override
+    public void delete(long productId) {
+        repo.deleteById(productId);
+    }
+
+    @Override
+    public List<Product> list() {
+        return repo.findAll(Sort.by(Sort.Direction.DESC, "id"));
     }
 
     @Override

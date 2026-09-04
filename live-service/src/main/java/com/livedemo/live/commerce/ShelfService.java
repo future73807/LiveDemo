@@ -34,9 +34,6 @@ public class ShelfService implements ShelfCountProvider {
         roomService.assertOwner(roomService.get(roomId), user);
         Product product = productRepo.findById(productId)
                 .orElseThrow(() -> BusinessException.notFound("商品不存在"));
-        if (!product.getOwnerId().equals(user.userId())) {
-            throw BusinessException.forbidden("仅可挂载自己的商品");
-        }
         RoomProduct mount = shelfRepo.findByRoomIdAndProductId(roomId, productId).orElse(null);
         if (mount != null && mount.isActive()) {
             throw BusinessException.badRequest("商品已挂载");
@@ -59,6 +56,17 @@ public class ShelfService implements ShelfCountProvider {
         mount.setRemovedAt(LocalDateTime.now());
         shelfRepo.save(mount);
         productRepo.findById(productId).ifPresent(p -> broadcast(roomId, "remove", p));
+    }
+
+    /** 平台删除商品时级联软删所有在架挂载，并逐房间广播下架事件 */
+    public int unmountAll(long productId) {
+        var actives = shelfRepo.findByProductIdAndRemovedAtIsNull(productId);
+        actives.forEach(mount -> {
+            mount.setRemovedAt(java.time.LocalDateTime.now());
+            shelfRepo.save(mount);
+            productRepo.findById(productId).ifPresent(p -> broadcast(mount.getRoomId(), "remove", p));
+        });
+        return actives.size();
     }
 
     @Override
