@@ -64,11 +64,21 @@ public class RoomController {
     @GetMapping("/{id}/play-urls")
     public ApiResponse<PlayUrls> playUrls(@PathVariable long id) {
         Room room = service.get(id);
-        String host = props.getSrs().getPublicHost();
         String key = room.getStreamKey();
-        return ApiResponse.ok(new PlayUrls(
-                "http://%s:%d/rtc/v1/whep/?app=live&stream=%s".formatted(host, props.getSrs().getApiPort(), key),
-                "http://%s:%d/live/%s.flv".formatted(host, props.getSrs().getHttpPort(), key),
-                "http://%s:%d/live/%s.m3u8".formatted(host, props.getSrs().getHttpPort(), key)));
+        PlayUrls urls;
+        if ("base".equalsIgnoreCase(props.getSrs().getPlayUrlMode())) {
+            String base = props.getSrs().getPublicBaseUrl().replaceAll("/+$", "");
+            urls = new PlayUrls(
+                    base + "/rtc/v1/whep/?app=live&stream=" + key,
+                    base + "/live/" + key + ".flv",
+                    base + "/live/" + key + ".m3u8");
+        } else {
+            String host = props.getSrs().getPublicHost();
+            urls = new PlayUrls(
+                    "http://%s:%d/rtc/v1/whep/?app=live&stream=%s".formatted(host, props.getSrs().getApiPort(), key),
+                    "http://%s:%d/live/%s.flv".formatted(host, props.getSrs().getHttpPort(), key),
+                    "http://%s:%d/live/%s.m3u8".formatted(host, props.getSrs().getHttpPort(), key));
+        }
+        return ApiResponse.ok(urls);
     }
 }

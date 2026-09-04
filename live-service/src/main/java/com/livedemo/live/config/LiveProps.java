@@ -40,5 +40,8 @@ public class LiveProps {
         private int rtmpPort = 1935;
         private int apiPort = 1985;
         private int httpPort = 8080;
+        /** host=按 public-host:port 拼地址（本地开发）；base=按 public-base-url 拼同源地址（公网 HTTPS） */
+        private String playUrlMode = "host";
+        private String publicBaseUrl = "";
     }
 }
