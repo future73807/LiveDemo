@@ -377,5 +377,12 @@ SRS 回调 POST body 携带 `action, app, stream, param`：
 - 不做弹幕持久化、消息漫游
 - 不做录像 DVR、转码、连麦、跨平台转发
 - 不做 CDN 分发与集群（SRS 单机足够 demo）
-- 不做美颜/滤镜等推流端增强
+- ~~不做美颜/滤镜等推流端增强~~（M9 起提供网页开播台：摄像头/麦克风/屏幕共享推流）
 - 管理后台不做细粒度 RBAC（仅 HOST/ADMIN 两级）
+
+## 11. 增量设计（M9：网页开播台 / 平台商品库 / 响应式 / 嵌入）
+
+- **网页开播台**：主播在自己房间页通过 WebRTC WHIP（`/rtc/v1/whip/`）推流，支持摄像头/麦克风设备选择与屏幕共享；推流地址由 `GET /api/rooms/{id}/publish-urls`（房主）下发，主播零配置。OBS RTMP 通道保留。约束：`getUserMedia/getDisplayMedia` 仅 HTTPS 安全上下文可用，无备案 IP 部署用自签证书（见 deploy.md）
+- **平台商品库**：商品由 ADMIN 统一维护（增删改，`/admin` 商品管理页），主播仅从库中选品挂载/摘除；挂载不再校验商品归属；删除商品时级联软删所有在架挂载并广播 `product_update`
+- **响应式**：≤768px 断点——直播间纵向堆叠、列表单列、触屏友好
+- **嵌入模式**：宿主系统 iframe 嵌入 `?token=<JWT>&embed=1`（URL 参数注入登录态，隐藏站点骨架），并支持 `postMessage`（监听 `{type:'livedemo-auth', token}`、发出 `{type:'livedemo-ready'}` / `{type:'livedemo-room-status', status}`）；登录态查询 `GET /api/auth/me`（任意认证模式可用）
