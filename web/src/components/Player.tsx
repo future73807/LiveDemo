@@ -82,12 +82,15 @@ export default function Player({ playUrls, status }: { playUrls: PlayUrls | null
   return (
     <div className="player-box">
       <video ref={videoRef} autoPlay muted playsInline />
-      {status !== 'LIVING' && <div className="player-placeholder">主播还未开播</div>}
+      {status !== 'LIVING' && <div className="player-placeholder"><span className="ph-icon">LIVE</span>主播还未开播</div>}
       {status === 'LIVING' && mode === 'failed' && (
-        <div className="player-placeholder">播放失败 <button onClick={() => setMode('idle')}>重试</button></div>
+        <div className="player-placeholder">
+          <span className="ph-icon">!</span>播放失败
+          <button onClick={() => setMode('idle')}>重试</button>
+        </div>
       )}
       {mode === 'flv' && (
-        <span className="badge" style={{ position: 'absolute', left: 8, top: 8 }}>FLV 模式</span>
+        <span className="badge" style={{ position: 'absolute', left: 8, top: 8, background: 'rgba(0,0,0,.55)', color: '#fff', borderColor: 'transparent' }}>FLV 模式</span>
       )}
     </div>
   );

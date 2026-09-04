@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { cartApi, moderationApi, roomsApi, shelfApi } from '../api/endpoints';
 import type { CartEntry, PlayUrls, Room } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { nickColor, nickInitial } from '../components/nickColor';
 import Player from '../components/Player';
 import DanmakuLayer from '../components/DanmakuLayer';
 import ChatPanel from '../components/ChatPanel';
@@ -71,33 +72,46 @@ export default function RoomPage() {
   if (!room) return <div className="page muted">加载中…</div>;
 
   return (
-    <div className="page">
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-        <div className="row">
-          <h2>{room.title}</h2>
-          <span className={`badge ${state.status === 'LIVING' ? 'living' : ''}`}>
-            {state.status === 'LIVING' ? '直播中' : '未开播'}
+    <div className="page room-page">
+      <div className="room-header">
+        <div className="row room-title">
+          <span className="owner-avatar"
+            style={{ width: 38, height: 38, borderRadius: '50%', flex: 'none', display: 'inline-flex',
+              alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700,
+              background: nickColor(room.ownerName) }}>
+            {nickInitial(room.ownerName)}
           </span>
-          <span className="muted">{connected ? `${state.viewers} 人在线` : '连接中…'}</span>
+          <div style={{ minWidth: 0 }}>
+            <div className="row" style={{ gap: 8 }}>
+              <h2 style={{ fontSize: 17 }}>{room.title}</h2>
+              <span className={`badge ${state.status === 'LIVING' ? 'living' : ''}`}>
+                {state.status === 'LIVING' ? '直播中' : '未开播'}
+              </span>
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 1 }}>
+              {room.ownerName} · {connected ? `${state.viewers} 人在线` : '连接中…'}
+            </div>
+          </div>
         </div>
         <div className="row">
-          <button onClick={() => setCartOpen(true)}>🛒 购物车{cartCount > 0 ? `(${cartCount})` : ''}</button>
+          <button onClick={() => setCartOpen(true)}>购物车{cartCount > 0 ? `(${cartCount})` : ''}</button>
         </div>
       </div>
 
-      <div className="room-layout">
-        <div>
+      <div className="room-main">
+        <div className="player-stage">
           <Player playUrls={playUrls} status={state.status} />
           <DanmakuLayer messages={state.messages} />
-          {isOwner && (
-            <>
-              <StudioPanel roomId={roomId} onEnded={endStream} />
-              <HostPanel roomId={roomId} />
-            </>
-          )}
         </div>
 
-        <div className="side-panel">
+        {isOwner && (
+          <div className="host-tools">
+            <StudioPanel roomId={roomId} onEnded={endStream} />
+            <HostPanel roomId={roomId} />
+          </div>
+        )}
+
+        <aside className="side-panel">
           <div className="tabs">
             <button className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>聊天</button>
             <button className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>
@@ -116,7 +130,7 @@ export default function RoomPage() {
           ) : (
             <ProductShelf products={state.products} onAdd={p => addCart(p.id)} />
           )}
-        </div>
+        </aside>
       </div>
 
       <CartDrawer

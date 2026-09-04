@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ChatMessage } from '../api/types';
+import { nickColor } from './nickColor';
 
 export default function ChatPanel({ messages, canModerate, onSend, onMute, onDelete, notice }: {
   messages: ChatMessage[];
@@ -24,12 +25,12 @@ export default function ChatPanel({ messages, canModerate, onSend, onMute, onDel
       <div className="chat-list">
         {messages.map(m => (
           <div key={m.messageId} className="chat-item">
-            <span className="nick">{m.nickname}</span>
+            <span className="nick" style={{ color: nickColor(m.nickname) }}>{m.nickname}</span>
             <span>{m.content}</span>
             {canModerate && (
-              <span style={{ marginLeft: 8, whiteSpace: 'nowrap' }}>
-                <button style={{ padding: '0 6px', fontSize: 12 }} onClick={() => onMute(m.userId)}>禁言</button>
-                <button style={{ padding: '0 6px', fontSize: 12 }} onClick={() => onDelete(m.messageId)}>删除</button>
+              <span className="mod-actions">
+                <button onClick={() => onMute(m.userId)}>禁言</button>
+                <button onClick={() => onDelete(m.messageId)}>删除</button>
               </span>
             )}
           </div>

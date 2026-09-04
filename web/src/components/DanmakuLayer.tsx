@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '../api/types';
+import { nickColor } from './nickColor';
 
 interface ActiveDanmaku extends ChatMessage { track: number; }
 
@@ -29,7 +30,7 @@ export default function DanmakuLayer({ messages }: { messages: ChatMessage[] }) 
         <span key={m.messageId} className="danmaku-item"
           style={{ top: `${(m.track - 1) * 24 + 8}px` }}
           onAnimationEnd={() => setActive(list => list.filter(x => x.messageId !== m.messageId))}>
-          {m.nickname}：{m.content}
+          <span style={{ color: nickColor(m.nickname) }}>{m.nickname}</span>：{m.content}
         </span>
       ))}
     </div>
