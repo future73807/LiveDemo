@@ -22,8 +22,8 @@ test('注册 HOST → 建房 → 房间卡片出现', async ({ page }) => {
   await page.getByRole('button', { name: '创建房间' }).click();
   await page.locator('.dialog .field', { hasText: '房间标题' }).locator('input').fill(title);
   await page.getByRole('button', { name: '创建', exact: true }).click();
-  // 创建成功弹窗给出推流码，且首页列表出现本次房间卡片
-  await expect(page.locator('.dialog .field', { hasText: '推流码' }).locator('input')).toHaveValue(/room-/);
+  // 创建成功弹窗出现，且首页列表出现本次房间卡片
+  await expect(page.locator('.dialog', { hasText: '房间已创建' })).toBeVisible();
   await expect(page.locator('.card', { hasText: title }).first()).toBeVisible({ timeout: 10_000 });
 });
 

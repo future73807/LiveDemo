@@ -51,14 +51,17 @@ async function srsPublish(streamKey: string) {
   if (!resp.ok) throw new Error(`SRS hook 调用失败: ${resp.status}`);
 }
 
-/** HOST 从首页建房，从创建成功弹窗读出推流码（只读输入框的 value） */
+/** HOST 从首页建房并进入直播间；推流码 UI 不再展示，改从创建房间 API 响应读取 */
 async function createRoom(page: Page): Promise<{ title: string; streamKey: string }> {
   const title = `E2E 交互间-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   await page.getByRole('button', { name: '创建房间' }).click();
   await page.locator('.dialog .field', { hasText: '房间标题' }).locator('input').fill(title);
+  const createResp = await page.waitForResponse(r => r.url().includes('/api/rooms') && r.request().method() === 'POST');
   await page.getByRole('button', { name: '创建', exact: true }).click();
-  const streamKey = await page.locator('.dialog .field', { hasText: '推流码' }).locator('input').inputValue();
-  if (!streamKey) throw new Error('创建成功弹窗未返回推流码');
+  const streamKey = (await createResp.json()).data.streamKey;
+  if (!streamKey) throw new Error('创建房间 API 未返回推流码');
+  await page.getByRole('button', { name: '进入直播间' }).click();
+  await expect(page.locator('.studio')).toBeVisible({ timeout: 15_000 });
   return { title, streamKey };
 }
 
@@ -80,8 +83,7 @@ test('完整直播闭环：推流-出画-弹幕-商品-购物车-禁言-删除-�
   try {
     // ── HOST 建房并起推流 ──
     await login(hostPage, `e2e-flow-host-${ts}`, 'E2E主播甲', 'HOST');
-    const { title, streamKey } = await createRoom(hostPage);
-    await hostPage.getByRole('button', { name: '进入直播间' }).click();
+    const { title, streamKey } = await createRoom(hostPage);   // createRoom 内已进入直播间
     await expect(hostPage.locator('.player-box')).toBeVisible();
     startPush(container, streamKey);
     await expect(hostPage.locator('.badge', { hasText: '直播中' })).toBeVisible({ timeout: 30_000 });
@@ -230,7 +232,7 @@ test('管理后台：强制关播与封禁/解封点击流', async ({ browser })
   try {
     // 准备一个"直播中"房间（on_publish 回调与真实推流同路径）
     await login(hostPage, `e2e-admin-host-${ts}`, 'E2E主播丙', 'HOST');
-    const { title, streamKey } = await createRoom(hostPage);
+    const { title, streamKey } = await createRoom(hostPage);   // createRoom 内已进入直播间
     await srsPublish(streamKey);
 
     await login(adminPage, `e2e-flow-admin-${ts}`, 'E2E管理员丙', 'ADMIN');
