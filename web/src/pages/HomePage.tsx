@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { roomsApi } from '../api/endpoints';
 import type { Room } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { nickColor, nickInitial } from '../components/nickColor';
 
 export default function HomePage() {
   const { user, isHost } = useAuth();
@@ -36,24 +37,40 @@ export default function HomePage() {
 
   return (
     <div className="page">
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 18 }}>
         <h2>直播间</h2>
         {isHost && <button className="primary" onClick={() => setCreating(true)}>创建房间</button>}
       </div>
       {error && <div className="error-text" style={{ marginBottom: 8 }}>{error}</div>}
       <div className="grid">
-        {rooms.map(room => (
-          <div key={room.id} className="card" style={{ cursor: 'pointer' }} onClick={() => navigate(`/rooms/${room.id}`)}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <strong>{room.title}</strong>
-              <span className={`badge ${room.status === 'LIVING' ? 'living' : ''}`}>
-                {room.status === 'LIVING' ? '直播中' : '未开播'}
-              </span>
+        {rooms.map(room => {
+          const living = room.status === 'LIVING';
+          return (
+            <div key={room.id} className="card room-card" onClick={() => navigate(`/rooms/${room.id}`)}>
+              <div className="cover">
+                <div className="play-hint"><span className="play-btn">GO</span></div>
+                <span className={`status-pill ${living ? 'living' : ''}`}>
+                  <span className="dot" />{living ? '直播中' : '未开播'}
+                </span>
+                {living && <span className="viewers-pill">{room.viewerCount} 人在看</span>}
+              </div>
+              <div className="meta">
+                <div className="title">{room.title}</div>
+                <div className="sub">
+                  <span className="owner-avatar" style={{ background: nickColor(room.ownerName) }}>
+                    {nickInitial(room.ownerName)}
+                  </span>
+                  <span>{room.ownerName}</span>
+                  <span>·</span>
+                  <span>{room.productCount} 件商品</span>
+                </div>
+              </div>
             </div>
-            <div className="muted">{room.ownerName} · {room.viewerCount} 人在看 · {room.productCount} 件商品</div>
-          </div>
-        ))}
-        {!rooms.length && <div className="muted">暂无房间，{isHost ? '点击右上角创建' : '等待主播开播'}</div>}
+          );
+        })}
+        {!rooms.length && <div className="empty-hint" style={{ gridColumn: '1 / -1' }}>
+          <span className="ph-icon">···</span>暂无房间，{isHost ? '点击右上角创建' : '等待主播开播'}
+        </div>}
       </div>
 
       {creating && (
@@ -64,7 +81,7 @@ export default function HomePage() {
               <label>房间标题</label>
               <input value={title} onChange={e => setTitle(e.target.value)} autoFocus />
             </div>
-            <button className="primary" style={{ width: '100%' }} onClick={createRoom}>创建</button>
+            <button className="primary w-full" onClick={createRoom}>创建</button>
           </div>
         </div>
       )}
@@ -72,19 +89,11 @@ export default function HomePage() {
       {created && (
         <div className="dialog-mask">
           <div className="dialog">
-            <h3>房间已创建，去推流吧</h3>
-            <div className="field">
-              <label>推流服务器（OBS）</label>
-              <input readOnly value={created.pushUrl?.replace(/\/[^/]+$/, '') ?? ''} />
-            </div>
-            <div className="field">
-              <label>推流码</label>
-              <input readOnly value={created.streamKey ?? ''} />
-            </div>
+            <h3>房间已创建</h3>
             <div className="muted" style={{ marginBottom: 12 }}>
               提示：{user?.nickname}，推流开始后房间自动转为「直播中」。
             </div>
-            <button className="primary" style={{ width: '100%' }}
+            <button className="primary w-full"
               onClick={() => navigate(`/rooms/${created.id}`)}>进入直播间</button>
           </div>
         </div>
