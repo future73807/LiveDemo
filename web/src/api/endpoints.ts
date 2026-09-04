@@ -2,8 +2,15 @@ import { http } from './client';
 import type { CartEntry, PlayUrls, Product, Room } from './types';
 
 export const authApi = {
+  config: () => http.get<{ mode: string; registrationEnabled: boolean }>('/auth/config'),
   devToken: (userId: string, nickname: string, roles: string[]) =>
-    http.post<{ token: string; expiresIn: number }>('/auth/dev-token', { userId, nickname, roles })
+    http.post<{ token: string; expiresIn: number }>('/auth/dev-token', { userId, nickname, roles }),
+  login: (username: string, password: string) =>
+    http.post<{ token: string; expiresIn: number; user: { userId: string; nickname: string; roles: string[] } }>(
+      '/auth/login', { username, password }),
+  register: (p: { username: string; password: string; nickname: string; role: string }) =>
+    http.post<{ token: string; expiresIn: number; user: { userId: string; nickname: string; roles: string[] } }>(
+      '/auth/register', p)
 };
 
 export const roomsApi = {
