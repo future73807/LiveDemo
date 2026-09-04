@@ -20,6 +20,14 @@ public class RoomController {
 
     public record UpdateRoomRequest(String title) {}
     public record PlayUrls(String webrtc, String flv, String hls) {}
+    public record PublishUrls(String whip, String rtmp, String streamKey) {}
+
+    private String srsBase() {
+        if ("base".equalsIgnoreCase(props.getSrs().getPlayUrlMode())) {
+            return props.getSrs().getPublicBaseUrl().replaceAll("/+$", "");
+        }
+        return "http://%s:%d".formatted(props.getSrs().getPublicHost(), props.getSrs().getApiPort());
+    }
 
     @PostMapping
     public ApiResponse<RoomDto> create(@RequestBody @Valid CreateRoomRequest req,
@@ -65,20 +73,22 @@ public class RoomController {
     public ApiResponse<PlayUrls> playUrls(@PathVariable long id) {
         Room room = service.get(id);
         String key = room.getStreamKey();
-        PlayUrls urls;
-        if ("base".equalsIgnoreCase(props.getSrs().getPlayUrlMode())) {
-            String base = props.getSrs().getPublicBaseUrl().replaceAll("/+$", "");
-            urls = new PlayUrls(
-                    base + "/rtc/v1/whep/?app=live&stream=" + key,
-                    base + "/live/" + key + ".flv",
-                    base + "/live/" + key + ".m3u8");
-        } else {
-            String host = props.getSrs().getPublicHost();
-            urls = new PlayUrls(
-                    "http://%s:%d/rtc/v1/whep/?app=live&stream=%s".formatted(host, props.getSrs().getApiPort(), key),
-                    "http://%s:%d/live/%s.flv".formatted(host, props.getSrs().getHttpPort(), key),
-                    "http://%s:%d/live/%s.m3u8".formatted(host, props.getSrs().getHttpPort(), key));
-        }
-        return ApiResponse.ok(urls);
+        String base = srsBase();
+        String flvHlsBase = "base".equalsIgnoreCase(props.getSrs().getPlayUrlMode())
+                ? base : "http://%s:%d".formatted(props.getSrs().getPublicHost(), props.getSrs().getHttpPort());
+        return ApiResponse.ok(new PlayUrls(
+                base + "/rtc/v1/whep/?app=live&stream=" + key,
+                flvHlsBase + "/live/" + key + ".flv",
+                flvHlsBase + "/live/" + key + ".m3u8"));
+    }
+
+    @GetMapping("/{id}/publish-urls")
+    public ApiResponse<PublishUrls> publishUrls(@PathVariable long id,
+                                                @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
+        Room room = service.get(id);
+        service.assertOwner(room, user);
+        String key = room.getStreamKey();
+        String whip = srsBase() + "/rtc/v1/whip/?app=live&stream=" + key;
+        return ApiResponse.ok(new PublishUrls(whip, service.pushUrl(room), key));
     }
 }
