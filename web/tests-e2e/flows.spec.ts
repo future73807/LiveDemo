@@ -1,5 +1,13 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { execSync } from 'node:child_process';
+
+/** API 直签 dev-token（平台商品库建品等后端调用用） */
+async function apiToken(request: APIRequestContext, userId: string, role: 'ADMIN' | 'HOST'): Promise<string> {
+  const resp = await request.post('/api/auth/dev-token', { data: { userId, nickname: userId, roles: [role] } });
+  if (!resp.ok()) throw new Error(`dev-token 签发失败: ${resp.status()}`);
+  const { data } = await resp.json();
+  return data.token as string;
+}
 
 /** 与 smoke.spec.ts 相同的登录方式：dev-token 直签后注入本地存储（internal 模式 UI 由 account.spec 覆盖） */
 async function login(page: Page, userId: string, nickname: string, role: 'VIEWER' | 'HOST' | 'ADMIN') {
@@ -94,13 +102,17 @@ test('完整直播闭环：推流-出画-弹幕-商品-购物车-禁言-删除-�
     await expect(viewerPage.locator('.chat-item', { hasText: textA })).toBeVisible();
     await expect(hostPage.locator('.danmaku-item', { hasText: textA })).toBeVisible({ timeout: 10_000 });
 
-    // ── 商品：主播添加 → 挂载 → 观众端 product_update 实时可见 ──
-    await hostPage.getByPlaceholder('商品名').fill(productName);
-    await hostPage.getByPlaceholder('价格').fill('9.9');
-    await hostPage.getByRole('button', { name: '添加商品' }).click();
-    const productRow = hostPage.locator('.row', { hasText: productName }).last();
-    await expect(productRow.getByRole('button', { name: '挂载' })).toBeVisible();
-    await productRow.getByRole('button', { name: '挂载' }).click();
+    // ── 商品：管理员平台库建品 → 主播选品挂载 → 观众端 product_update 实时可见 ──
+    // （M9 起商品收归平台库：POST /api/products 仅 ADMIN，主播端改为选品挂载面板）
+    const adminToken = await apiToken(hostPage.request, `e2e-flow-admin-${ts}`, 'ADMIN');
+    const createResp = await hostPage.request.post('/api/products', {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { title: productName, price: 9.9 }
+    });
+    if (!createResp.ok()) throw new Error(`平台建品失败: ${createResp.status()}`);
+    await hostPage.getByPlaceholder('搜索商品').fill(productName);
+    await hostPage.locator('.row', { hasText: productName })
+      .getByRole('button', { name: '挂载', exact: true }).first().click();
     await viewerPage.getByRole('button', { name: /商品/ }).click();
     await expect(viewerPage.locator('.card', { hasText: productName })).toBeVisible({ timeout: 10_000 });
 
@@ -233,8 +245,10 @@ test('管理后台：强制关播与封禁/解封点击流', async ({ browser })
     await expect(adminPage.locator('tr', { hasText: title }).getByText('未开播')).toBeVisible();
 
     // 封禁 / 解封：必须有行内反馈，不能静默无响应
+    // M9 起 AdminPage 分 房间/商品/封禁 三个 Tab：先切到封禁 Tab，提交按钮用 .card 限定避免与 Tab 同名按钮撞 strict mode
+    await adminPage.locator('.tabs').getByRole('button', { name: '封禁' }).click();
     await adminPage.getByPlaceholder('用户 ID').fill(banTarget);
-    await adminPage.getByRole('button', { name: '封禁', exact: true }).click();
+    await adminPage.locator('.card').getByRole('button', { name: '封禁', exact: true }).click();
     await expect(adminPage.getByText(`已封禁用户 ${banTarget}`)).toBeVisible({ timeout: 10_000 });
     await adminPage.getByRole('button', { name: '解封' }).click();
     await expect(adminPage.getByText(`已解封用户 ${banTarget}`)).toBeVisible({ timeout: 10_000 });

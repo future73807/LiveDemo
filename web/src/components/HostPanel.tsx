@@ -17,6 +17,16 @@ export default function HostPanel({ roomId }: { roomId: number }) {
   }, [roomId]);
   useEffect(() => { refresh(); }, [refresh]);
 
+  // 搜索时重新拉取平台库（防抖）：管理员可能在主播页打开后新建商品，本地缓存会过期
+  const refreshLibrary = useCallback(async () => {
+    try { setLibrary(await productsApi.list()); } catch { /* 静默：保留旧列表 */ }
+  }, []);
+  useEffect(() => {
+    if (!kw) return;
+    const t = setTimeout(refreshLibrary, 300);
+    return () => clearTimeout(t);
+  }, [kw, refreshLibrary]);
+
   const mountedIds = new Set(mounted.map(p => p.id));
   const filtered = library.filter(p => !kw || p.title.includes(kw));
 
