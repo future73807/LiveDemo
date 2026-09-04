@@ -16,7 +16,9 @@ async function login(page: Page, userId: string, nickname: string, role: 'VIEWER
   await page.evaluate(t => localStorage.setItem('live.token', t), token);
   await page.evaluate(u => localStorage.setItem('live.user', JSON.stringify(u)), user);
   await page.reload();
-  await expect(page.locator('.topbar').getByText(new RegExp(nickname))).toBeVisible({ timeout: 15_000 });
+  // 移动端顶栏只留头像胶囊（昵称文本隐藏防溢出），用「顶栏出现且无登录弹窗」判定登录成功
+  await expect(page.locator('.topbar')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.dialog-mask')).toHaveCount(0);
 }
 
 test('移动视口 375×667：房间页无横向滚动且播放器可见', async ({ page, request }) => {

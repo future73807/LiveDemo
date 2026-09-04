@@ -56,9 +56,10 @@ async function createRoom(page: Page): Promise<{ title: string; streamKey: strin
   const title = `E2E 交互间-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   await page.getByRole('button', { name: '创建房间' }).click();
   await page.locator('.dialog .field', { hasText: '房间标题' }).locator('input').fill(title);
-  const createResp = await page.waitForResponse(r => r.url().includes('/api/rooms') && r.request().method() === 'POST');
+  // 先挂等待再点击触发请求；先 await 会死锁（响应只能由这次点击产生）
+  const createRespPromise = page.waitForResponse(r => r.url().includes('/api/rooms') && r.request().method() === 'POST');
   await page.getByRole('button', { name: '创建', exact: true }).click();
-  const streamKey = (await createResp.json()).data.streamKey;
+  const streamKey = (await (await createRespPromise).json()).data.streamKey;
   if (!streamKey) throw new Error('创建房间 API 未返回推流码');
   await page.getByRole('button', { name: '进入直播间' }).click();
   await expect(page.locator('.studio')).toBeVisible({ timeout: 15_000 });
@@ -180,8 +181,7 @@ test('断线恢复：观众网络闪断后 WS 重连并可继续发言', async (
 
   try {
     await login(hostPage, `e2e-reconnect-host-${ts}`, 'E2E主播乙', 'HOST');
-    const { title } = await createRoom(hostPage);
-    await hostPage.getByRole('button', { name: '进入直播间' }).click();
+    const { title } = await createRoom(hostPage);   // createRoom 内已进入直播间，这里不能再点一次「进入直播间」（弹窗已关，按钮不存在会等到超时）
     await expect(hostPage.locator('.player-box')).toBeVisible();
 
     await login(viewerPage, `e2e-reconnect-viewer-${ts}`, 'E2E观众乙', 'VIEWER');
