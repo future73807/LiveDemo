@@ -23,6 +23,9 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=demo
       - LIVE_JWT_SECRET=${LIVE_JWT_SECRET:-ZGVtb19kZW1vX2RlbW9fZGVtb19kZW1vX2RlbW8xMjM0NQ==}
+      - LIVE_AUTH_MODE=${LIVE_AUTH_MODE:-internal}
+      - LIVE_ADMIN_USER=${LIVE_ADMIN_USER:-admin}
+      - LIVE_ADMIN_PASSWORD=${LIVE_ADMIN_PASSWORD:-admin123456}
     volumes:
       - livedemo-data:/app/data
 

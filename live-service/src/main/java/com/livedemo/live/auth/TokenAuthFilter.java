@@ -25,8 +25,13 @@ public class TokenAuthFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String credential = extract(request);
         if (credential != null) {
-            AuthProvider provider = providers.stream().filter(p -> p.mode() == mode).findFirst()
-                    .orElseThrow(() -> new IllegalStateException("未找到 mode=" + mode + " 的 AuthProvider"));
+            // gateway 模式信任反代注入的头；internal/jwt 一律走 JWT 验签（internal 自签发 JWT 复用同一验签链）
+            AuthProvider provider = providers.stream()
+                    .filter(p -> mode == AuthMode.GATEWAY_HEADER
+                            ? p.mode() == AuthMode.GATEWAY_HEADER
+                            : p.mode() == AuthMode.JWT)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("未找到 mode=" + mode + " 对应的 AuthProvider"));
             try {
                 AuthUser user = provider.authenticate(credential);
                 if (banService.isBanned(user.userId())) {

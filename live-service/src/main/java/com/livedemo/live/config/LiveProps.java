@@ -20,8 +20,12 @@ public class LiveProps {
 
     @Data
     public static class Auth {
+        /** internal | jwt | gateway */
         private String mode = "jwt";
         private Jwt jwt = new Jwt();
+        /** internal 模式管理员引导：环境变量注入，留空跳过 */
+        private String adminUsername;
+        private String adminPassword;
     }
 
     @Data

@@ -16,7 +16,9 @@ server:
 
 live:
   auth:
-    mode: jwt                # jwt | gateway
+    mode: ${LIVE_AUTH_MODE:internal}           # internal | jwt | gateway
+    admin-username: ${LIVE_ADMIN_USER:}        # internal 模式管理员引导（留空跳过）
+    admin-password: ${LIVE_ADMIN_PASSWORD:}
     jwt:
       # Base64 的 32 字节密钥（demo 默认值，生产必须通过环境变量覆盖）
       secret: ${LIVE_JWT_SECRET:ZGVtb19kZW1vX2RlbW9fZGVtb19kZW1vX2RlbW8xMjM0NQ==}
