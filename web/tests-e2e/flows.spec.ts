@@ -1,15 +1,20 @@
 import { test, expect, type Page } from '@playwright/test';
 import { execSync } from 'node:child_process';
 
-/** 与 smoke.spec.ts 相同的登录方式（dev-token 直签） */
+/** 与 smoke.spec.ts 相同的登录方式：dev-token 直签后注入本地存储（internal 模式 UI 由 account.spec 覆盖） */
 async function login(page: Page, userId: string, nickname: string, role: 'VIEWER' | 'HOST' | 'ADMIN') {
+  const resp = await page.request.post('/api/auth/dev-token', {
+    data: { userId, nickname, roles: [role] }
+  });
+  if (!resp.ok()) throw new Error(`dev-token 签发失败: ${resp.status()}`);
+  const { data } = await resp.json();
+  const user = { userId, nickname, roles: [role] };
   await page.goto('/');
-  await page.getByPlaceholder('如 host1 / v1').fill(userId);
-  await page.getByPlaceholder('直播间展示名').fill(nickname);
-  await page.locator('select').selectOption(role);
-  await page.getByRole('button', { name: '进入' }).click();
+  await page.evaluate(token => localStorage.setItem('live.token', token), data.token);
+  await page.evaluate(u => localStorage.setItem('live.user', JSON.stringify(u)), user);
+  await page.reload();
   // 断言限定顶栏：首页房间卡片会显示历史房间的主播昵称，全局 getByText 会撞 strict mode。
-  // 宽限 15s：容器刚重启时 JVM 冷启动会让首个 dev-token 请求变慢
+  // 宽限 15s：容器刚重启时 JVM 冷启动会让首个请求变慢
   await expect(page.locator('.topbar').getByText(new RegExp(nickname))).toBeVisible({ timeout: 15_000 });
 }
 
