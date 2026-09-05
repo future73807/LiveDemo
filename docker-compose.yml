@@ -4,9 +4,11 @@ services:
     container_name: livedemo-srs
     restart: unless-stopped
     ports:
-      - "1935:1935"                 # RTMP 推流（主播直连）
-      - "127.0.0.1:1985:1985"       # SRS API/WHEP——仅本机，公网走 web 反代
-      - "127.0.0.1:8080:8080"       # FLV/HLS——仅本机，公网走 web 反代
+      # 宿主端口全部可经 .env 重映射（本机端口被 Hyper-V 保留区段/其他应用占用时）；
+      # 改了 SRS_API_PORT/SRS_HTTP_PORT 时，live-service 会自动用同名变量拼播放/推流地址
+      - "${SRS_RTMP_PORT:-1935}:1935"                 # RTMP 推流（主播直连）
+      - "127.0.0.1:${SRS_API_PORT:-1985}:1985"       # SRS API/WHEP/WHIP——仅本机，公网走 web 反代
+      - "127.0.0.1:${SRS_HTTP_PORT:-8080}:8080"      # FLV/HLS——仅本机，公网走 web 反代
       - "${SRS_UDP_BIND:-0.0.0.0}:8000:8000/udp"   # WebRTC 媒体
     environment:
       - CANDIDATE=${SRS_CANDIDATE:-127.0.0.1}   # 公网部署必须改为服务器公网 IP
@@ -19,7 +21,7 @@ services:
     container_name: livedemo-api
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8081:8081"       # 仅本机调试用；公网流量走 web 反代
+      - "127.0.0.1:${API_PORT:-8081}:8081"       # 仅本机调试用；公网流量走 web 反代
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-demo}
       - LIVE_AUTH_MODE=${LIVE_AUTH_MODE:-internal}
@@ -28,6 +30,9 @@ services:
       - LIVE_ADMIN_PASSWORD=${LIVE_ADMIN_PASSWORD:?请在 .env 中设置管理员密码}
       - LIVE_PLAY_URL_MODE=${LIVE_PLAY_URL_MODE:-host}
       - LIVE_PUBLIC_BASE_URL=${LIVE_PUBLIC_BASE_URL:-}
+      # 与 srs 宿主端口映射联动：浏览器按 localhost:<映射端口> 访问 WHIP/WHEP/FLV
+      - LIVE_SRS_API_PORT=${SRS_API_PORT:-1985}
+      - LIVE_SRS_HTTP_PORT=${SRS_HTTP_PORT:-8080}
     volumes:
       - livedemo-data:/app/data
 
@@ -36,7 +41,7 @@ services:
     container_name: livedemo-web
     restart: unless-stopped
     ports:
-      - "${WEB_BIND:-0.0.0.0}:3000:80"   # 宝塔/1Panel 反代目标：http://127.0.0.1:3000
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-3000}:80"   # 宝塔/1Panel 反代目标：http://127.0.0.1:3000
     depends_on:
       - live-service
 

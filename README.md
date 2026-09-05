@@ -68,8 +68,72 @@ docker compose up -d --build
 页面不展示任何推流码/推流地址；如需用 OBS 或 ffmpeg 推流，可自行调 `POST /api/rooms` 获取 room 的 streamKey 后：
 
 ```bash
-ffmpeg -re -i test.mp4 -c copy -f flv rtmp://localhost:1935/live/{streamKey}
+ffmpeg -re -i test.mp4 -c copy -f flv rtmp://localhost:${SRS_RTMP_PORT:-1935}/live/{streamKey}
 ```
+
+## 嵌入模式（iframe 集成到宿主系统）
+
+直播间整页可嵌入现有系统的 iframe，无站点顶栏/登录弹窗，铺满 iframe 视口。
+
+### 快速接入
+
+```html
+<!-- 1. 用后端签发的 JWT（任意认证模式）拼 iframe 地址 -->
+<iframe
+  src="https://你的域名/rooms/1?token=<JWT>&embed=1"
+  style="width:100%;height:100%;border:0"></iframe>
+```
+
+- `?token=<JWT>`：注入登录态后自动从 URL 摘除，前端调 `GET /api/auth/me` 确认身份（internal/jwt/gateway 三种认证模式通用）
+- `?embed=1`：隐藏顶栏与登录弹窗，直播间铺满 iframe（桌面/移动端响应式）
+
+### postMessage 双通道（宿主页 ↔ 直播间）
+
+```html
+<script>
+  const iframe = document.querySelector('iframe');
+
+  // 1) 直播间就绪 / 房间状态变化 → 宿主页接收
+  window.addEventListener('message', e => {
+    if (e.data?.type === 'livedemo-ready')       console.log('直播间已就绪');
+    if (e.data?.type === 'livedemo-room-status') console.log('房间状态:', e.data.status); // LIVING | IDLE
+  });
+
+  // 2) 登录态过期后 → 宿主页重新注入新 token（无需刷新 iframe）
+  function refreshLiveToken(newJwt) {
+    iframe.contentWindow.postMessage({ type: 'livedemo-auth', token: newJwt }, '*');
+  }
+</script>
+```
+
+| 消息 | 方向 | 载荷 |
+|---|---|---|
+| `livedemo-ready` | 直播间 → 宿主 | 骨架就绪，可以开始发 auth |
+| `livedemo-room-status` | 直播间 → 宿主 | `{status: 'LIVING'\|'IDLE'}` |
+| `livedemo-auth` | 宿主 → 直播间 | `{token: '<JWT>'}`，重新注入登录态 |
+
+### 嵌入注意事项
+
+- token 过期/非法：直播间会显示"登录态已失效"提示，宿主页应监听状态并重新签发 JWT 后走 `livedemo-auth` 注入
+- iframe 高度建议占满视口或容器（直播间内部自适应，页面不滚动）
+
+## 网页开播要求与排错
+
+开播（摄像头/麦克风/屏幕共享）全部走浏览器 WebRTC（WHIP 推流），**必须满足**：
+
+1. **安全上下文**：`localhost` 可用 HTTP；其余地址必须 HTTPS，否则 `getUserMedia` 直接不可用（浏览器不弹授权）
+2. **浏览器授权**：首次点「摄像头/共享屏幕」时允许权限；拒绝后需进浏览器站点设置重置
+3. **SRS 端口可达**：播放/推流走 `localhost:<SRS_API_PORT>`（本地）或同源反代 `/rtc/`（公网 base 模式）
+
+常见故障对照：
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| 点摄像头报"打开设备失败" | 非 HTTPS 环境或无摄像头 | 用 localhost 访问或部署 HTTPS；共享屏幕无需摄像头 |
+| "WHIP 推流失败: 404/超时" | SRS API 端口不通 | 检查 srs 容器状态与 `SRS_API_PORT` 映射；混合内容（HTTPS 页面拉 HTTP 推流地址）时改用 `base` 播放地址模式 |
+| 画面卡住不出帧 | WebRTC 候选地址不通 | 多网卡/虚拟网卡机器把 `.env` 的 `SRS_CANDIDATE` 改为本机局域网 IP |
+| 本机端口被占用/被保留 | Hyper-V 保留区段或其他应用 | `.env` 重映射：`SRS_API_PORT`/`SRS_HTTP_PORT`/`SRS_RTMP_PORT`/`WEB_PORT`（live-service 自动跟随拼接地址） |
+| 观众看得到听不到/黑屏 | 编解码或降级链路 | 自动降级 HTTP-FLV；确认 SRS 的 8080（或映射端口）可访问 |
 
 ## 与现有产品集成（多生态）
 
