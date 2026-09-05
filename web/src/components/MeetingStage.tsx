@@ -2,65 +2,137 @@ import { useEffect, useRef, useState } from 'react';
 import { roomsApi } from '../api/endpoints';
 import { whipPublish, whipStop, WhipSession } from '../realtime/whip';
 
-type VideoMode = 'off' | 'camera' | 'screen';
-
 /**
- * 腾讯会议式开播：主播进入房间即是"会场"，悬浮工具条一键开关
- * 麦克风/摄像头/共享屏幕，网页直接开播（WHIP），无推流码概念。
- * 切换画面源用 replaceTrack，推流会话不断，观众端不闪断。
+ * 腾讯会议式开播：悬浮工具条独立控制 麦克风/摄像头/共享屏幕。
+ * - 视频经画布合成后推单轨：摄像头与屏幕共享可同屏（屏幕全屏 + 摄像头画中画），
+ *   开关任一画面源都只改画布内容，推流会话零闪断
+ * - 音频经 WebAudio 混音成单轨：麦克风独立开关（可纯麦克风开播），屏幕共享可带系统声音
  */
+
+const CANVAS_W = 1280;
+const CANVAS_H = 720;
+
 export default function MeetingStage({ roomId, roomStatus, onEnded }: {
   roomId: number;
   roomStatus: 'IDLE' | 'LIVING' | null;
   onEnded: () => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const mainVideoRef = useRef<HTMLVideoElement>(null);
+  const camVideoRef = useRef<HTMLVideoElement>(null);
+  const screenVideoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
   const sessionRef = useRef<WhipSession | null>(null);
   const whipRef = useRef('');
-  const audioRef = useRef<MediaStreamTrack | null>(null);   // 当前推流的音轨（麦克风或静音轨）
-  const camStreamRef = useRef<MediaStream | null>(null);    // 摄像头流（共享屏幕期间保持活跃，便于切回）
-  const camVideoRef = useRef<MediaStreamTrack | null>(null);
-  const prevModeRef = useRef<VideoMode>('off');             // 共享屏幕前的画面模式
-  const modeRef = useRef<VideoMode>('off');
+
+  // 音频图：麦克风 / 屏幕声 各自增益后混入同一目的地
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const mixDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const micGainRef = useRef<GainNode | null>(null);
+  const screenGainRef = useRef<GainNode | null>(null);
+
+  // 原始媒体流
+  const camStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const canvasTrackRef = useRef<MediaStreamTrack | null>(null);
+  const rafRef = useRef(0);
+  const prevStatusRef = useRef<'IDLE' | 'LIVING' | null>(null);
+
+  // 状态镜像（同步读写，供合成循环与自动停播判断）
+  const flags = useRef({ micOn: false, camOn: false, screenOn: false, publishing: false });
 
   const [publishing, setPublishing] = useState(false);
-  const [micOn, setMicOn] = useState(true);
+  const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
-  const [sharing, setSharing] = useState(false);
+  const [screenOn, setScreenOn] = useState(false);
   const [error, setError] = useState('');
+
+  const SECURE_HINT = `当前通过 http://${location.host} 访问，浏览器已禁用摄像头/麦克风/屏幕共享。请改用 http://localhost:${location.port || '80'} 访问，或为站点部署 HTTPS（README「网页开播要求与排错」）`;
+  const mediaOk = !!navigator.mediaDevices && window.isSecureContext;
+
+  function setFlag<K extends keyof typeof flags.current>(key: K, value: (typeof flags.current)[K]) {
+    flags.current[key] = value;
+    if (key === 'publishing') setPublishing(value);
+    if (key === 'micOn') setMicOn(value);
+    if (key === 'camOn') setCamOn(value);
+    if (key === 'screenOn') setScreenOn(value);
+  }
 
   useEffect(() => { roomsApi.publishUrls(roomId).then(u => { whipRef.current = u.whip; }).catch(() => {}); }, [roomId]);
   useEffect(() => () => { cleanup(); }, []);   // 卸载清理
 
-  // 被管理员强制关播（LIVING→IDLE 翻转）时停掉本端推流：房间已 IDLE，继续推流只会白白占用
-  // prevStatus 守卫：刚开播瞬间 status 仍是初始 IDLE，不能误停
-  const prevStatusRef = useRef<'IDLE' | 'LIVING' | null>(null);
+  // 被管理员强制关播（LIVING→IDLE 翻转）时停掉本端推流；prevStatus 守卫不误伤刚开播瞬间
   useEffect(() => {
     if (prevStatusRef.current === 'LIVING' && roomStatus === 'IDLE' && sessionRef.current) {
       stopPublishing();
-      setError('直播已被管理员结束，可重新开启摄像头开播');
+      setError('直播已被管理员结束，可重新开启摄像头/麦克风开播');
     }
     prevStatusRef.current = roomStatus;
   }, [roomStatus]);
 
   function cleanup() {
     if (sessionRef.current) { whipStop(sessionRef.current).catch(() => {}); sessionRef.current = null; }
+    cancelAnimationFrame(rafRef.current);
     camStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
     camStreamRef.current = null;
-    audioRef.current = null;
-    camVideoRef.current = null;
-    modeRef.current = 'off';
-    attachPreview(null);
+    screenStreamRef.current = null;
+    micGainRef.current = null;
+    screenGainRef.current = null;
+    canvasTrackRef.current = null;
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    mixDestRef.current = null;
+    flags.current = { micOn: false, camOn: false, screenOn: false, publishing: false };
+    setPublishing(false); setMicOn(false); setCamOn(false); setScreenOn(false);
+    if (mainVideoRef.current) mainVideoRef.current.srcObject = null;
   }
 
-  function attachPreview(video: MediaStreamTrack | null) {
-    if (!videoRef.current) return;
-    if (!video && !audioRef.current) { videoRef.current.srcObject = null; return; }
-    const tracks = [video, audioRef.current].filter(Boolean) as MediaStreamTrack[];
-    videoRef.current.srcObject = new MediaStream(tracks);
+  function ensureAudioGraph() {
+    if (!audioCtxRef.current) {
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      mixDestRef.current = ctx.createMediaStreamDestination();
+    }
+    if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
   }
 
-  /** WHIP 地址懒加载：首屏加载后立刻点开播时，预取可能尚未返回（否则 fetch('') 会打出 404） */
+  /** 画布合成循环：屏幕全屏 / 摄像头全屏 / 双源画中画 / 纯黑（纯麦克风直播） */
+  function startCompositor() {
+    if (canvasTrackRef.current) return;
+    const canvas = canvasRef.current!;
+    canvas.width = CANVAS_W; canvas.height = CANVAS_H;
+    const g = canvas.getContext('2d')!;
+    const draw = () => {
+      const cam = camVideoRef.current, scr = screenVideoRef.current;
+      const camReady = flags.current.camOn && cam && cam.readyState >= 2;
+      const scrReady = flags.current.screenOn && scr && scr.readyState >= 2;
+      g.fillStyle = '#000'; g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      const contain = (vid: HTMLVideoElement) => {
+        const vw = vid.videoWidth || CANVAS_W, vh = vid.videoHeight || CANVAS_H;
+        const s = Math.min(CANVAS_W / vw, CANVAS_H / vh);
+        g.drawImage(vid, (CANVAS_W - vw * s) / 2, (CANVAS_H - vh * s) / 2, vw * s, vh * s);
+      };
+      if (scrReady) contain(scr);
+      if (camReady && !scrReady) contain(cam);
+      if (camReady && scrReady) {   // 画中画：摄像头缩略在右下
+        const vw = cam.videoWidth || 16, vh = cam.videoHeight || 9;
+        const pw = 320, ph = pw * (vh / vw);
+        g.drawImage(cam, CANVAS_W - pw - 24, CANVAS_H - ph - 24, pw, ph);
+        g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 3;
+        g.strokeRect(CANVAS_W - pw - 24, CANVAS_H - ph - 24, pw, ph);
+      }
+      if (!camReady && !scrReady) {
+        g.fillStyle = '#555'; g.font = '600 36px sans-serif'; g.textAlign = 'center';
+        g.fillText('麦克风直播中', CANVAS_W / 2, CANVAS_H / 2);
+      }
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    canvasTrackRef.current = canvas.captureStream(30).getVideoTracks()[0];
+  }
+
+  /** WHIP 地址懒加载（预取未返回时兜底） */
   async function whipUrl(): Promise<string> {
     if (!whipRef.current) {
       const u = await roomsApi.publishUrls(roomId);
@@ -69,47 +141,71 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
     return whipRef.current;
   }
 
-  /** 已建立会话时仅替换画面轨；未建立则带初始画面建立会话 */
-  async function ensurePublish(video: MediaStreamTrack | null) {
-    const session = sessionRef.current;
-    if (!session) {
+  /** 建立会话（画布视频轨 + 混音音轨）；已建立则只刷新预览 */
+  async function ensurePublish() {
+    startCompositor();
+    ensureAudioGraph();
+    if (!sessionRef.current) {
       const url = await whipUrl();
-      const tracks = [video, audioRef.current].filter(Boolean) as MediaStreamTrack[];
+      const tracks = [canvasTrackRef.current!, mixDestRef.current!.stream.getAudioTracks()[0]];
       sessionRef.current = await whipPublish(url, new MediaStream(tracks));
-      setPublishing(true);
-      attachPreview(video);
-      return;
+      setFlag('publishing', true);
     }
-    const sender = session.pc.getSenders().find(s => s.track?.kind === 'video');
-    if (sender && video) await sender.replaceTrack(video);
-    else if (sender && !video) await sender.replaceTrack(null);
-    attachPreview(video);
+    attachPreview();
+  }
+
+  function attachPreview() {
+    if (!mainVideoRef.current || !canvasTrackRef.current || !mixDestRef.current) return;
+    mainVideoRef.current.srcObject = new MediaStream([
+      canvasTrackRef.current,
+      mixDestRef.current.stream.getAudioTracks()[0]
+    ]);
+  }
+
+  async function toggleMic() {
+    setError('');
+    if (!mediaOk) { setError(SECURE_HINT); return; }
+    try {
+      ensureAudioGraph();
+      if (micOn && micGainRef.current) {
+        micGainRef.current.gain.value = 0;   // 静音保留链路
+        setFlag('micOn', false);
+      } else {
+        if (!micGainRef.current) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const src = audioCtxRef.current!.createMediaStreamSource(stream);
+          const gain = audioCtxRef.current!.createGain();
+          src.connect(gain).connect(mixDestRef.current!);
+          micGainRef.current = gain;
+        }
+        micGainRef.current.gain.value = 1;
+        setFlag('micOn', true);
+      }
+      await ensurePublish();
+      maybeAutoStop();
+    } catch (e) { setError(e instanceof Error ? e.message : '打开麦克风失败（需 HTTPS 环境并授权）'); }
   }
 
   async function toggleCamera() {
     setError('');
     if (!mediaOk) { setError(SECURE_HINT); return; }
     try {
-      if (modeRef.current === 'screen') { await stopShare(); return; }
-      if (camOn) {   // 关摄像头：停发画面但不中断会话（占位黑屏保持音轨）
-        if (camVideoRef.current) camVideoRef.current.enabled = false;
-        setCamOn(false);
-        attachPreview(null);
-        return;
-      }
-      if (!camStreamRef.current) {
-        camStreamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        camVideoRef.current = camStreamRef.current.getVideoTracks()[0];
-        audioRef.current = camStreamRef.current.getAudioTracks()[0] ?? null;
-        setMicOn(true);
+      if (camOn) {
+        camStreamRef.current?.getTracks().forEach(t => t.stop());
+        camStreamRef.current = null;
+        if (camVideoRef.current) camVideoRef.current.srcObject = null;
+        setFlag('camOn', false);
       } else {
-        camVideoRef.current = camStreamRef.current.getVideoTracks()[0];
-        camVideoRef.current.enabled = true;
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        camStreamRef.current = stream;
+        if (camVideoRef.current) {
+          camVideoRef.current.srcObject = stream;
+          await camVideoRef.current.play().catch(() => {});
+        }
+        setFlag('camOn', true);
       }
-      await ensurePublish(camVideoRef.current);
-      modeRef.current = 'camera';
-      setCamOn(true);
-      setError('');
+      await ensurePublish();
+      maybeAutoStop();
     } catch (e) { setError(e instanceof Error ? e.message : '打开摄像头失败（需 HTTPS 环境并授权）'); }
   }
 
@@ -117,28 +213,52 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
     setError('');
     if (!mediaOk) { setError(SECURE_HINT); return; }
     try {
-      if (sharing) { await stopShare(); return; }
-      const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = display.getVideoTracks()[0];
-      prevModeRef.current = modeRef.current === 'camera' && camOn ? 'camera' : 'off';
-      // 浏览器"停止共享"按钮与页面按钮等价
-      screenTrack.addEventListener('ended', () => { stopShare().catch(() => {}); });
-      await ensurePublish(screenTrack);
-      modeRef.current = 'screen';
-      setSharing(true);
+      if (screenOn) {
+        await stopScreen();
+      } else {
+        // audio:true：勾选"同时分享系统声音"时带上系统/标签页声音，混入同一音轨
+        const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        screenStreamRef.current = display;
+        if (screenVideoRef.current) {
+          screenVideoRef.current.srcObject = display;
+          await screenVideoRef.current.play().catch(() => {});
+        }
+        ensureAudioGraph();
+        const audioTrack = display.getAudioTracks()[0];
+        if (audioTrack && !screenGainRef.current) {
+          const src = audioCtxRef.current!.createMediaStreamSource(new MediaStream([audioTrack]));
+          const gain = audioCtxRef.current!.createGain();
+          src.connect(gain).connect(mixDestRef.current!);
+          screenGainRef.current = gain;
+        }
+        screenTrackEnded(screenStreamRef.current.getVideoTracks()[0]);
+        setFlag('screenOn', true);
+      }
+      await ensurePublish();
+      maybeAutoStop();
     } catch (e) { setError(e instanceof Error ? e.message : '打开屏幕共享失败（需 HTTPS 环境并授权）'); }
   }
 
-  async function stopShare() {
-    setSharing(false);
-    if (prevModeRef.current === 'camera' && camVideoRef.current) {
-      camVideoRef.current.enabled = true;
-      await ensurePublish(camVideoRef.current);
-      modeRef.current = 'camera';
-      setCamOn(true);
-    } else {
-      await stopPublishing();
-    }
+  /** 浏览器"停止共享"按钮与页面按钮等价 */
+  function screenTrackEnded(track: MediaStreamTrack) {
+    track.addEventListener('ended', () => {
+      stopScreen();
+      ensurePublish().then(() => maybeAutoStop()).catch(() => {});
+    });
+  }
+
+  async function stopScreen() {
+    setFlag('screenOn', false);
+    if (screenGainRef.current) screenGainRef.current.gain.value = 0;
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current = null;
+    if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
+  }
+
+  /** 画面源与麦克风全关后自动停播，避免黑场空推 */
+  function maybeAutoStop() {
+    const f = flags.current;
+    if (f.publishing && !f.micOn && !f.camOn && !f.screenOn) stopPublishing();
   }
 
   async function stopPublishing() {
@@ -146,33 +266,32 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
       whipStop(sessionRef.current).catch(() => {});
       sessionRef.current = null;
     }
-    modeRef.current = 'off';
-    setPublishing(false);
-    setSharing(false);
-    setCamOn(false);
-    attachPreview(null);
+    cancelAnimationFrame(rafRef.current);
+    camStreamRef.current?.getVideoTracks().forEach(t => t.stop());
+    camStreamRef.current = null;
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current = null;
+    micGainRef.current = null;
+    screenGainRef.current = null;
+    canvasTrackRef.current = null;
+    setFlag('publishing', false);
+    setFlag('camOn', false);
+    setFlag('screenOn', false);
+    setFlag('micOn', false);
+    if (mainVideoRef.current) mainVideoRef.current.srcObject = null;
   }
-
-  function toggleMic() {
-    if (!audioRef.current) return;
-    audioRef.current.enabled = !micOn;
-    setMicOn(!micOn);
-  }
-
-  const hasMic = !!audioRef.current;
-  // 非安全上下文（非 localhost/127.0.0.1 且非 HTTPS）：浏览器整体禁用媒体 API，
-  // navigator.mediaDevices 为 undefined——必须提前拦截并给出人话，而不是抛 TypeError
-  const mediaOk = !!navigator.mediaDevices && window.isSecureContext;
-  const SECURE_HINT = `当前通过 http://${location.host} 访问，浏览器已禁用摄像头/麦克风/屏幕共享。请改用 http://localhost:${location.port || '80'} 访问，或为站点部署 HTTPS（README「网页开播要求与排错」）`;
 
   return (
     <div className="player-box meeting">
-      <video ref={videoRef} autoPlay muted playsInline />
+      <video ref={mainVideoRef} autoPlay muted playsInline />
+      <video ref={camVideoRef} autoPlay muted playsInline className="meeting-src-video" />
+      <video ref={screenVideoRef} autoPlay muted playsInline className="meeting-src-video" />
+      <canvas ref={canvasRef} className="meeting-src-video" />
       {!publishing && (
         <div className="player-placeholder">
           <span className="ph-icon">LIVE</span>
-          开启摄像头或共享屏幕，直接开播
-          <span className="muted" style={{ fontSize: 12 }}>网页开播，观众进房即看</span>
+          开启麦克风、摄像头或共享屏幕，直接开播
+          <span className="muted" style={{ fontSize: 12 }}>摄像头与屏幕可同屏（画中画）· 屏幕共享可带系统声音</span>
           {!mediaOk && (
             <span className="meeting-secure-warn">
               当前地址（http://{location.host}）不是安全上下文，浏览器已禁用摄像头/麦克风/屏幕共享。
@@ -181,26 +300,28 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
           )}
         </div>
       )}
+      {publishing && !camOn && !screenOn && (
+        <div className="meeting-tag">麦克风直播中（无画面）</div>
+      )}
       {error && <div className="meeting-error">{error}</div>}
       <div className="meeting-toolbar">
         <button
-          className={!publishing || !hasMic ? 'off' : micOn ? 'on' : 'warn'}
-          disabled={!publishing || !hasMic}
-          title={micOn ? '关闭麦克风' : '打开麦克风'}
+          className={micOn ? 'on' : ''}
+          title={micOn ? '关闭麦克风' : '开启麦克风（可单独开播）'}
           onClick={toggleMic}>
-          {micOn ? '麦克风' : '已静音'}
+          {micOn ? '麦克风' : '麦克风已关'}
         </button>
         <button
-          className={modeRef.current === 'camera' && camOn ? 'on' : ''}
-          title={sharing ? '切回摄像头画面' : camOn ? '关闭摄像头' : '开启摄像头'}
+          className={camOn ? 'on' : ''}
+          title={camOn ? '关闭摄像头' : '开启摄像头（可与屏幕共享同屏）'}
           onClick={toggleCamera}>
-          {modeRef.current === 'camera' && !camOn ? '摄像头已关' : sharing ? '切回摄像头' : '摄像头'}
+          {camOn ? '摄像头' : '摄像头已关'}
         </button>
         <button
-          className={sharing ? 'on' : ''}
-          title={sharing ? '停止屏幕共享' : '共享屏幕'}
+          className={screenOn ? 'on' : ''}
+          title={screenOn ? '停止屏幕共享' : '共享屏幕（可同时分享系统声音）'}
           onClick={toggleScreen}>
-          {sharing ? '停止共享' : '共享屏幕'}
+          {screenOn ? '停止共享' : '共享屏幕'}
         </button>
         <button className="danger" onClick={async () => { cleanup(); onEnded(); }}>结束直播</button>
       </div>
