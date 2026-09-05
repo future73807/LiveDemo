@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import mpegts from 'mpegts.js';
 import type { PlayUrls } from '../api/types';
 
 const WHEP_TIMEOUT_MS = 3000;
@@ -60,7 +59,9 @@ export default function Player({ playUrls, status }: { playUrls: PlayUrls | null
         await video.play().catch(() => {});
         return;
       } catch { /* 落入 FLV 降级 */ }
-      // 2. 降级 HTTP-FLV
+      // 2. 降级 HTTP-FLV（mpegts 按需加载：绝大多数会话 WebRTC 成功，不必进首屏包）
+      if (cancelled) { setMode('failed'); return; }
+      const { default: mpegts } = await import('mpegts.js');
       if (cancelled || !mpegts.isSupported()) { if (!cancelled) setMode('failed'); return; }
       const player = mpegts.createPlayer({
         type: 'flv', isLive: true, url: playUrls.flv
