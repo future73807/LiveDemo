@@ -88,6 +88,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
 
   async function toggleCamera() {
     setError('');
+    if (!mediaOk) { setError(SECURE_HINT); return; }
     try {
       if (modeRef.current === 'screen') { await stopShare(); return; }
       if (camOn) {   // 关摄像头：停发画面但不中断会话（占位黑屏保持音轨）
@@ -114,6 +115,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
 
   async function toggleScreen() {
     setError('');
+    if (!mediaOk) { setError(SECURE_HINT); return; }
     try {
       if (sharing) { await stopShare(); return; }
       const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -158,6 +160,10 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
   }
 
   const hasMic = !!audioRef.current;
+  // 非安全上下文（非 localhost/127.0.0.1 且非 HTTPS）：浏览器整体禁用媒体 API，
+  // navigator.mediaDevices 为 undefined——必须提前拦截并给出人话，而不是抛 TypeError
+  const mediaOk = !!navigator.mediaDevices && window.isSecureContext;
+  const SECURE_HINT = `当前通过 http://${location.host} 访问，浏览器已禁用摄像头/麦克风/屏幕共享。请改用 http://localhost:${location.port || '80'} 访问，或为站点部署 HTTPS（README「网页开播要求与排错」）`;
 
   return (
     <div className="player-box meeting">
@@ -167,6 +173,12 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
           <span className="ph-icon">LIVE</span>
           开启摄像头或共享屏幕，直接开播
           <span className="muted" style={{ fontSize: 12 }}>网页开播，观众进房即看</span>
+          {!mediaOk && (
+            <span className="meeting-secure-warn">
+              当前地址（http://{location.host}）不是安全上下文，浏览器已禁用摄像头/麦克风/屏幕共享。
+              请改用 http://localhost:{location.port || '80'} 访问，或部署 HTTPS。
+            </span>
+          )}
         </div>
       )}
       {error && <div className="meeting-error">{error}</div>}

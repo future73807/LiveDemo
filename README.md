@@ -129,6 +129,7 @@ ffmpeg -re -i test.mp4 -c copy -f flv rtmp://localhost:${SRS_RTMP_PORT:-1935}/li
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
+| 报错 `Cannot read properties of undefined (reading 'getDisplayMedia'/'getUserMedia')` | 通过**非 localhost 的 HTTP 地址**访问（如 `http://192.168.x.x:3002`），浏览器判定非安全上下文，整体禁用摄像头/麦克风/屏幕共享 | 改用 `http://localhost:<端口>` 访问；跨设备访问必须部署 HTTPS（见 docs/deploy.md），页面上也会显示同样的黄色提示 |
 | 点摄像头报"打开设备失败" | 非 HTTPS 环境或无摄像头 | 用 localhost 访问或部署 HTTPS；共享屏幕无需摄像头 |
 | "WHIP 推流失败: 404/超时" | SRS API 端口不通 | 检查 srs 容器状态与 `SRS_API_PORT` 映射；混合内容（HTTPS 页面拉 HTTP 推流地址）时改用 `base` 播放地址模式 |
 | 画面卡住不出帧 | WebRTC 候选地址不通 | 多网卡/虚拟网卡机器把 `.env` 的 `SRS_CANDIDATE` 改为本机局域网 IP |
