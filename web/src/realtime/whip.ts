@@ -37,7 +37,9 @@ export async function whipPublish(url: string, stream: MediaStream): Promise<Whi
   const answer = await resp.text();
   await pc.setRemoteDescription({ type: 'answer', sdp: answer });
   const loc = resp.headers.get('Location');
-  return { pc, location: loc ? new URL(loc, url).toString() : null };
+  // 推流地址可能是同源相对路径（base 模式），Location 解析时补全 origin
+  const baseUrl = /^https?:\/\//i.test(url) ? url : window.location.origin + url;
+  return { pc, location: loc ? new URL(loc, baseUrl).toString() : null };
 }
 
 export async function whipStop(session: WhipSession): Promise<void> {

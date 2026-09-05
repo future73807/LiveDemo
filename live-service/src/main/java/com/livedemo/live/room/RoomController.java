@@ -24,6 +24,8 @@ public class RoomController {
 
     private String srsBase() {
         if ("base".equalsIgnoreCase(props.getSrs().getPlayUrlMode())) {
+            // base 模式且未配 PUBLIC_BASE_URL 时返回空串 → 前端拿同源相对地址（/rtc/...、/live/...），
+            // 由反代转发到 SRS：同源天然规避混合内容，HTTPS/自签/任意主机名通用
             return props.getSrs().getPublicBaseUrl().replaceAll("/+$", "");
         }
         return "http://%s:%d".formatted(props.getSrs().getPublicHost(), props.getSrs().getApiPort());

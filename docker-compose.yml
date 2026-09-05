@@ -41,7 +41,12 @@ services:
     container_name: livedemo-web
     restart: unless-stopped
     ports:
-      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-3000}:80"   # 宝塔/1Panel 反代目标：http://127.0.0.1:3000
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-3000}:${WEB_CONTAINER_PORT:-80}"   # 宝塔/1Panel 反代目标：http://127.0.0.1:3000
+    volumes:
+      # nginx 配置与证书均可经 .env 切换：WEB_NGINX_CONF=./web/nginx.tls.conf + WEB_CERT_DIR=./local/certs
+      # （切到自签 HTTPS 时 live-service 需 LIVE_PLAY_URL_MODE=base，播放/推流地址为同源相对路径，规避混合内容）
+      - ${WEB_NGINX_CONF:-./web/nginx.conf}:/etc/nginx/conf.d/default.conf:ro
+      - ${WEB_CERT_DIR:-./web/certs}:/etc/nginx/certs:ro
     depends_on:
       - live-service
 
