@@ -26,3 +26,9 @@ Thumbs.db
 
 # 环境与密钥
 .env
+
+# 本地联调产物（工具缓存/截图/日志/临时 conf）
+.v2c/
+.video_agent/
+.local/
+docker-compose.local.yml
