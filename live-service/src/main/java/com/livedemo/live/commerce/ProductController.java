@@ -24,14 +24,19 @@ public class ProductController {
     @Data
     public static class CreateProductRequest {
         @NotBlank private String title;
-        @NotNull private java.math.BigDecimal price;
+        @NotNull
+        @jakarta.validation.constraints.Positive(message = "价格必须大于 0")
+        private java.math.BigDecimal price;
         private String imageUrl;
+        /** 仅允许 http(s)：detailUrl 会渲染成观众可点击链接，伪协议（javascript: 等）在服务端即拒绝 */
+        @jakarta.validation.constraints.Pattern(regexp = "^https?://.*", flags = jakarta.validation.constraints.Pattern.Flag.CASE_INSENSITIVE,
+                message = "详情链接必须以 http(s):// 开头")
         private String detailUrl;
         private int stock;
     }
 
     @PostMapping
-    public ApiResponse<Product> create(@RequestBody CreateProductRequest req,
+    public ApiResponse<Product> create(@RequestBody @jakarta.validation.Valid CreateProductRequest req,
                                        @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
         user.requireRole(AuthUser.ADMIN);
         return ApiResponse.ok(catalog.create(new ProductDraft(req.getTitle(), req.getPrice(),
@@ -46,7 +51,7 @@ public class ProductController {
     }
 
     @PatchMapping("/{id}")
-    public ApiResponse<Product> update(@PathVariable long id, @RequestBody CreateProductRequest req,
+    public ApiResponse<Product> update(@PathVariable long id, @RequestBody @jakarta.validation.Valid CreateProductRequest req,
                                        @RequestAttribute(TokenAuthFilter.ATTR) AuthUser user) {
         user.requireRole(AuthUser.ADMIN);
         return ApiResponse.ok(catalog.update(id, new ProductDraft(req.getTitle(), req.getPrice(),

@@ -10,6 +10,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [creating, setCreating] = useState(false);
+  const [creatingBusy, setCreatingBusy] = useState(false);
   const [title, setTitle] = useState('');
   const [created, setCreated] = useState<Room | null>(null);
   const [error, setError] = useState('');
@@ -25,6 +26,8 @@ export default function HomePage() {
   }, [refresh]);
 
   async function createRoom() {
+    if (creatingBusy) return;   // 双击/慢网下防重复建房
+    setCreatingBusy(true);
     try {
       const room = await roomsApi.create(title.trim() || '未命名直播间');
       setCreated(room);
@@ -32,6 +35,8 @@ export default function HomePage() {
       refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建失败');
+    } finally {
+      setCreatingBusy(false);
     }
   }
 
@@ -81,7 +86,9 @@ export default function HomePage() {
               <label>房间标题</label>
               <input value={title} onChange={e => setTitle(e.target.value)} autoFocus />
             </div>
-            <button className="primary w-full" onClick={createRoom}>创建</button>
+            <button className="primary w-full" disabled={creatingBusy} onClick={createRoom}>
+              {creatingBusy ? '创建中…' : '创建'}
+            </button>
           </div>
         </div>
       )}
