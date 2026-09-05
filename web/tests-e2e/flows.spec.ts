@@ -43,7 +43,8 @@ function stopPush(container: string) {
 
 /** 直接调用 SRS on_publish 回调标记开播（与真实推流走同一后端路径 markLiving） */
 async function srsPublish(streamKey: string) {
-  const resp = await fetch('http://localhost:8081/api/v1/srs/hooks', {
+  const base = process.env.E2E_BASE_URL ?? 'http://localhost:3000';   // 走 vite 代理，避免硬编码后端端口
+  const resp = await fetch(`${base}/api/v1/srs/hooks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'on_publish', stream: streamKey })

@@ -2,6 +2,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// API 目标可经环境变量覆盖：本机 8081 撞 Hyper-V 动态保留区段时改用其他端口
+const apiTarget = process.env.VITE_API_TARGET ?? 'http://localhost:8081';
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -11,8 +14,8 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api': { target: 'http://localhost:8081', changeOrigin: true },
-      '/ws': { target: 'ws://localhost:8081', ws: true }
+      '/api': { target: apiTarget, changeOrigin: true },
+      '/ws': { target: apiTarget.replace(/^http/, 'ws'), ws: true }
     }
   }
 });
