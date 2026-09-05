@@ -9,6 +9,9 @@ interface Options {
   onError?: (code: string, message: string) => void;
 }
 
+/** WS 基址：默认同源（走反向代理）；开发时可设 VITE_WS_BASE 直连后端，绕开 vite ws 代理的脆断问题 */
+const WS_BASE: string = (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_WS_BASE ?? '';
+
 /** 房间 WS 连接：指数退避重连（1s/2s/4s…上限 30s），重连后重拉房间状态与小黄车（设计 §5.7）
  *  未登录（token 为空）时静默不连接——登录弹窗场景不该对 /ws 发起无凭据的重试风暴 */
 export function useRoomSocket(roomId: number | null, options: Options = {}) {
@@ -26,7 +29,7 @@ export function useRoomSocket(roomId: number | null, options: Options = {}) {
     let timer: ReturnType<typeof setTimeout>;
 
     function connect() {
-      const ws = new WebSocket(`/ws?roomId=${roomId}&token=${encodeURIComponent(getToken())}`);
+      const ws = new WebSocket(`${WS_BASE}/ws?roomId=${roomId}&token=${encodeURIComponent(getToken())}`);
       socketRef.current = ws;
 
       ws.onopen = () => {

@@ -60,12 +60,22 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
     videoRef.current.srcObject = new MediaStream(tracks);
   }
 
+  /** WHIP 地址懒加载：首屏加载后立刻点开播时，预取可能尚未返回（否则 fetch('') 会打出 404） */
+  async function whipUrl(): Promise<string> {
+    if (!whipRef.current) {
+      const u = await roomsApi.publishUrls(roomId);
+      whipRef.current = u.whip;
+    }
+    return whipRef.current;
+  }
+
   /** 已建立会话时仅替换画面轨；未建立则带初始画面建立会话 */
   async function ensurePublish(video: MediaStreamTrack | null) {
     const session = sessionRef.current;
     if (!session) {
+      const url = await whipUrl();
       const tracks = [video, audioRef.current].filter(Boolean) as MediaStreamTrack[];
-      sessionRef.current = await whipPublish(whipRef.current, new MediaStream(tracks));
+      sessionRef.current = await whipPublish(url, new MediaStream(tracks));
       setPublishing(true);
       attachPreview(video);
       return;

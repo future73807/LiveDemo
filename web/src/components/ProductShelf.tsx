@@ -1,6 +1,11 @@
 import type { Product } from '../api/types';
 
-/** 商品卡：有详情链接则整卡直达（新标签页打开），无链接仅展示 */
+/** 只有 http(s) 才渲染为链接：detailUrl 来自管理端自由输入，javascript:/data: 等伪协议必须 neutralize */
+function isSafeUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+/** 商品卡：有安全详情链接则整卡直达（新标签页打开），无链接/不安全链接仅展示 */
 function ProductCard({ p }: { p: Product }) {
   const body = (
     <>
@@ -11,12 +16,13 @@ function ProductCard({ p }: { p: Product }) {
         <div className="p-title">{p.title}</div>
         <div className="p-price">￥{p.price}</div>
       </div>
-      {p.detailUrl && <span className="p-go">查看</span>}
+      {p.detailUrl && isSafeUrl(p.detailUrl) && <span className="p-go">查看</span>}
     </>
   );
+  const linkable = !!p.detailUrl && isSafeUrl(p.detailUrl);
   const cls = 'product-card';
-  return p.detailUrl
-    ? <a className={cls} href={p.detailUrl} target="_blank" rel="noopener noreferrer">{body}</a>
+  return linkable
+    ? <a className={cls} href={p.detailUrl!} target="_blank" rel="noopener noreferrer">{body}</a>
     : <div className={cls}>{body}</div>;
 }
 
