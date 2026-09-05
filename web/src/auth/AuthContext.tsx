@@ -6,10 +6,12 @@ export interface AuthUser { userId: string; nickname: string; roles: string[]; }
 
 interface AuthCtx {
   user: AuthUser | null;
-  /** internal=自有账号体系（登录/注册双 Tab）；external=dev-token UI（jwt/gateway 接入期兼容） */
-  authMode: 'internal' | 'external';
+  /** loading=配置未拉取完成（登录表单此时不渲染，避免表单模式切换清空用户输入）；internal=自有账号体系；external=dev-token UI */
+  authMode: 'internal' | 'external' | 'loading';
   /** 嵌入模式（iframe）：隐藏顶栏/登录弹窗，postMessage 双通道 */
   isEmbed: boolean;
+  /** 嵌入模式下注入的 token 验证失败（父页应重新注入或引导刷新） */
+  embedAuthFailed: boolean;
   login: (userId: string, nickname: string, roles: string[]) => Promise<void>;
   loginPassword: (username: string, password: string) => Promise<void>;
   registerAccount: (p: { username: string; password: string; nickname: string; role: string }) => Promise<void>;
@@ -26,8 +28,9 @@ const Ctx = createContext<AuthCtx>(null as unknown as AuthCtx);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => tokenStorage.user);
+  // 初始为 loading：登录表单等配置就绪再渲染，避免 external→internal 切换清空用户已填内容
   // config 拉取失败保持 external（原 dev-token UI），保证非 internal 部署形态与测试稳定
-  const [authMode, setAuthMode] = useState<'internal' | 'external'>('external');
+  const [authMode, setAuthMode] = useState<'internal' | 'external' | 'loading'>('loading');
   // 嵌入标记：?embed=1 时落 localStorage，刷新/站内跳转后仍生效（useState 初始化仅执行一次）
   const [isEmbed] = useState<boolean>(() => {
     if (new URLSearchParams(window.location.search).get('embed') === '1') {
@@ -37,11 +40,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   // StrictMode 下 effect 双执行：URL 注入必须幂等（ref 守卫）
   const injectedRef = useRef(false);
+  // 嵌入 token 验证失败标记（URL 注入或 postMessage 注入后 /me 失败）
+  const [embedAuthFailed, setEmbedAuthFailed] = useState(false);
 
   useEffect(() => {
     authApi.config()
-      .then(c => { if (c.mode === 'internal') setAuthMode('internal'); })
-      .catch(() => { /* 保持 external */ });
+      .then(c => setAuthMode(c.mode === 'internal' ? 'internal' : 'external'))
+      .catch(() => setAuthMode('external'));
   }, []);
 
   // 嵌入模式：?token=<JWT> 注入登录态并从 URL 摘除，随后 /me 拉取身份；失败清 token
@@ -58,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''));
     authApi.me()
       .then(me => { tokenStorage.user = me; setUser(me); })
-      .catch(() => { clearToken(); tokenStorage.user = null; });
+      .catch(() => { clearToken(); tokenStorage.user = null; setEmbedAuthFailed(true); });
   }, []);
 
   const value = useMemo<AuthCtx>(() => {
@@ -73,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       authMode,
       isEmbed,
+      embedAuthFailed,
       isHost: !!user?.roles.includes('HOST'),
       isAdmin: !!user?.roles.includes('ADMIN'),
       async login(userId, nickname, roles) {
@@ -93,10 +99,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const me = await authApi.me();
           tokenStorage.user = me;
           setUser(me);
+          setEmbedAuthFailed(false);
         } catch (e) {
           clearToken();
           tokenStorage.user = null;
           setUser(null);
+          setEmbedAuthFailed(true);
           throw e;
         }
       },
@@ -104,10 +112,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearToken();
         tokenStorage.user = null;
         setUser(null);
+        setEmbedAuthFailed(false);
         localStorage.removeItem(EMBED_KEY);
       }
     };
-  }, [user, authMode, isEmbed]);
+  }, [user, authMode, isEmbed, embedAuthFailed]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

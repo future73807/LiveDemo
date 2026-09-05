@@ -9,7 +9,8 @@ interface Options {
   onError?: (code: string, message: string) => void;
 }
 
-/** 房间 WS 连接：指数退避重连（1s/2s/4s…上限 30s），重连后重拉房间状态与小黄车（设计 §5.7） */
+/** 房间 WS 连接：指数退避重连（1s/2s/4s…上限 30s），重连后重拉房间状态与小黄车（设计 §5.7）
+ *  未登录（token 为空）时静默不连接——登录弹窗场景不该对 /ws 发起无凭据的重试风暴 */
 export function useRoomSocket(roomId: number | null, options: Options = {}) {
   const [state, setState] = useState<SocketState>(emptySocketState);
   const [connected, setConnected] = useState(false);
@@ -17,9 +18,10 @@ export function useRoomSocket(roomId: number | null, options: Options = {}) {
   const retryRef = useRef(1);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  const hasToken = !!getToken();
 
   useEffect(() => {
-    if (roomId === null) return;
+    if (roomId === null || !hasToken) return;
     let closed = false;
     let timer: ReturnType<typeof setTimeout>;
 
@@ -62,7 +64,7 @@ export function useRoomSocket(roomId: number | null, options: Options = {}) {
       clearTimeout(timer);
       socketRef.current?.close();
     };
-  }, [roomId]);
+  }, [roomId, hasToken]);   // hasToken 变化（登录/退出）时重建连接：先开房间页后登录也要连上
 
   const api = useMemo(() => ({
     sendChat(content: string) {

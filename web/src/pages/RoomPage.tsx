@@ -21,6 +21,7 @@ export default function RoomPage() {
   const { user, isAdmin, isEmbed } = useAuth();
 
   const [room, setRoom] = useState<Room | null>(null);
+  const [roomMissing, setRoomMissing] = useState(false);
   const [playUrls, setPlayUrls] = useState<PlayUrls | null>(null);
   const [tab, setTab] = useState<Tab>('chat');
   const [notice, setNotice] = useState('');
@@ -30,7 +31,7 @@ export default function RoomPage() {
   const { state, connected, sendChat } = useRoomSocket(Number.isFinite(roomId) ? roomId : null, { onMuted, onError });
 
   useEffect(() => {
-    roomsApi.get(roomId).then(setRoom).catch(e => setNotice(e.message));
+    roomsApi.get(roomId).then(setRoom).catch(() => setRoomMissing(true));
     roomsApi.playUrls(roomId).then(setPlayUrls).catch(() => {});
   }, [roomId]);
 
@@ -55,6 +56,17 @@ export default function RoomPage() {
   }
 
   if (!user) return null;
+  if (roomMissing) {
+    return (
+      <div className="page room-missing">
+        <div className="card">
+          <h3>房间不存在或已被删除</h3>
+          <p className="muted" style={{ margin: '8px 0 16px' }}>该直播间可能已结束或链接有误。</p>
+          <button className="primary" onClick={() => navigate('/')}>返回首页</button>
+        </div>
+      </div>
+    );
+  }
   if (!room) return <div className="page muted">加载中…</div>;
 
   const tabs: Array<[Tab, string]> = isOwner
@@ -88,7 +100,7 @@ export default function RoomPage() {
       <div className="room-main">
         <div className="player-stage">
           {isOwner
-            ? <MeetingStage roomId={roomId} onEnded={endStream} />
+            ? <MeetingStage roomId={roomId} roomStatus={state.status} onEnded={endStream} />
             : <Player playUrls={playUrls} status={state.status} />}
           <DanmakuLayer messages={state.messages} />
         </div>
@@ -103,6 +115,7 @@ export default function RoomPage() {
             <ChatPanel
               messages={state.messages}
               canModerate={canModerate}
+              connected={connected}
               onSend={sendChat}
               notice={notice}
               onMute={uid => moderationApi.mute(roomId, uid, 600).catch(e => setNotice(e.message))}

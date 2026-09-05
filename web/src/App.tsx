@@ -53,7 +53,7 @@ function Topbar() {
 }
 
 function Gate({ children }: { children: React.ReactNode }) {
-  const { user, isEmbed, adoptToken } = useAuth();
+  const { user, isEmbed, embedAuthFailed, adoptToken } = useAuth();
 
   // 嵌入模式标记落到 body：CSS 据此把直播间铺满 iframe 视口（无顶栏）
   useEffect(() => {
@@ -83,7 +83,12 @@ function Gate({ children }: { children: React.ReactNode }) {
   return (
     <>
       {!isEmbed && <Topbar />}
-      {children}
+      {isEmbed && embedAuthFailed && !user ? (
+        // 嵌入 token 失效：给宿主页一个明确信号，而不是静默白屏
+        <div className="embed-denied">
+          <p>登录态已失效，请刷新宿主页面重新接入</p>
+        </div>
+      ) : children}
       {!user && !isEmbed && <LoginModal />}
     </>
   );

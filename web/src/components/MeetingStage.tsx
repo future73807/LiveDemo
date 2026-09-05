@@ -9,7 +9,11 @@ type VideoMode = 'off' | 'camera' | 'screen';
  * 麦克风/摄像头/共享屏幕，网页直接开播（WHIP），无推流码概念。
  * 切换画面源用 replaceTrack，推流会话不断，观众端不闪断。
  */
-export default function MeetingStage({ roomId, onEnded }: { roomId: number; onEnded: () => void }) {
+export default function MeetingStage({ roomId, roomStatus, onEnded }: {
+  roomId: number;
+  roomStatus: 'IDLE' | 'LIVING' | null;
+  onEnded: () => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const sessionRef = useRef<WhipSession | null>(null);
   const whipRef = useRef('');
@@ -27,6 +31,17 @@ export default function MeetingStage({ roomId, onEnded }: { roomId: number; onEn
 
   useEffect(() => { roomsApi.publishUrls(roomId).then(u => { whipRef.current = u.whip; }).catch(() => {}); }, [roomId]);
   useEffect(() => () => { cleanup(); }, []);   // 卸载清理
+
+  // 被管理员强制关播（LIVING→IDLE 翻转）时停掉本端推流：房间已 IDLE，继续推流只会白白占用
+  // prevStatus 守卫：刚开播瞬间 status 仍是初始 IDLE，不能误停
+  const prevStatusRef = useRef<'IDLE' | 'LIVING' | null>(null);
+  useEffect(() => {
+    if (prevStatusRef.current === 'LIVING' && roomStatus === 'IDLE' && sessionRef.current) {
+      stopPublishing();
+      setError('直播已被管理员结束，可重新开启摄像头开播');
+    }
+    prevStatusRef.current = roomStatus;
+  }, [roomStatus]);
 
   function cleanup() {
     if (sessionRef.current) { whipStop(sessionRef.current).catch(() => {}); sessionRef.current = null; }

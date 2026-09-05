@@ -70,6 +70,7 @@ export default function AdminPage() {
               ))}
             </tbody>
           </table>
+          {!rooms.length && <div className="empty-hint">暂无房间</div>}
         </div>
       )}
 

@@ -49,6 +49,9 @@ export default function LoginModal() {
     }
   }
 
+  // 配置未就绪时不渲染表单：避免 dev-token 表单闪现后切到密码表单清空用户输入
+  if (authMode === 'loading') return null;
+
   if (authMode !== 'internal') {
     // jwt/gateway 接入期：dev-token 直签 UI 原样保留
     return (

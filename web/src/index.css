@@ -459,6 +459,16 @@ table.list th, table.list td { text-align: left; padding: 9px 10px; border-botto
 table.list th { color: var(--muted); font-weight: 500; font-size: 13px; }
 table.list tr:hover td { background: var(--panel-2); }
 
+/* 房间不存在兜底 + 嵌入 token 失效提示 */
+.room-missing { display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
+.room-missing .card { max-width: 380px; text-align: center; }
+.embed-denied {
+  height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 14px;
+  background: var(--bg);
+}
+
 /* ---------- 通用工具类 ---------- */
 .mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; }
 .w-full { width: 100%; }
