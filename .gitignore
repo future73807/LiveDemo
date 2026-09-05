@@ -32,3 +32,4 @@ Thumbs.db
 .video_agent/
 .local/
 docker-compose.local.yml
+local/
