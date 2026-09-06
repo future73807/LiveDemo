@@ -32,6 +32,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
   const screenGainRef = useRef<GainNode | null>(null);
 
   // 原始媒体流
+  const micStreamRef = useRef<MediaStream | null>(null);
   const camStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const canvasTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -73,10 +74,14 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
   function cleanup() {
     if (sessionRef.current) { whipStop(sessionRef.current).catch(() => {}); sessionRef.current = null; }
     cancelAnimationFrame(rafRef.current);
+    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micStreamRef.current = null;
     camStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     camStreamRef.current = null;
     screenStreamRef.current = null;
+    micGainRef.current?.disconnect();
+    screenGainRef.current?.disconnect();
     micGainRef.current = null;
     screenGainRef.current = null;
     canvasTrackRef.current = null;
@@ -173,6 +178,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
       } else {
         if (!micGainRef.current) {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          micStreamRef.current = stream;
           const src = audioCtxRef.current!.createMediaStreamSource(stream);
           const gain = audioCtxRef.current!.createGain();
           src.connect(gain).connect(mixDestRef.current!);
@@ -224,13 +230,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
           await screenVideoRef.current.play().catch(() => {});
         }
         ensureAudioGraph();
-        const audioTrack = display.getAudioTracks()[0];
-        if (audioTrack && !screenGainRef.current) {
-          const src = audioCtxRef.current!.createMediaStreamSource(new MediaStream([audioTrack]));
-          const gain = audioCtxRef.current!.createGain();
-          src.connect(gain).connect(mixDestRef.current!);
-          screenGainRef.current = gain;
-        }
+        connectScreenAudio(display.getAudioTracks()[0]);
         screenTrackEnded(screenStreamRef.current.getVideoTracks()[0]);
         setFlag('screenOn', true);
       }
@@ -247,9 +247,21 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
     });
   }
 
+  /** 屏幕声接线：旧节点连的是上一轮已结束的轨道，每次共享必须断开重建，否则二次共享无声 */
+  function connectScreenAudio(track: MediaStreamTrack | undefined) {
+    screenGainRef.current?.disconnect();
+    screenGainRef.current = null;
+    if (!track || !audioCtxRef.current || !mixDestRef.current) return;
+    const src = audioCtxRef.current.createMediaStreamSource(new MediaStream([track]));
+    const gain = audioCtxRef.current.createGain();
+    src.connect(gain).connect(mixDestRef.current);
+    screenGainRef.current = gain;
+  }
+
   async function stopScreen() {
     setFlag('screenOn', false);
-    if (screenGainRef.current) screenGainRef.current.gain.value = 0;
+    screenGainRef.current?.disconnect();
+    screenGainRef.current = null;
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
     if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
@@ -267,10 +279,14 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
       sessionRef.current = null;
     }
     cancelAnimationFrame(rafRef.current);
+    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micStreamRef.current = null;
     camStreamRef.current?.getVideoTracks().forEach(t => t.stop());
     camStreamRef.current = null;
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
+    micGainRef.current?.disconnect();
+    screenGainRef.current?.disconnect();
     micGainRef.current = null;
     screenGainRef.current = null;
     canvasTrackRef.current = null;

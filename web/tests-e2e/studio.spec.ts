@@ -1,9 +1,21 @@
+import { existsSync } from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
 
 // 假摄像头/假麦克风：无 OBS 的浏览器开播闭环（WHIP 推流走 SRS 原生 /rtc/v1/whip/）
-// channel=chrome：Playwright 自带 Chromium 无 H264 解码器，观众端无法出画
+// 需带 H264 解码器的品牌浏览器（自带 Chromium 无解码器，观众端无法出画）。
+// 频道优先级：E2E_BROWSER_CHANNEL 环境变量 > 本机装了 Chrome 用 chrome > 回退 msedge（Windows 必有且带 H264）
+function resolveBrandChannel(): 'chrome' | 'msedge' {
+  if (process.env.E2E_BROWSER_CHANNEL) return process.env.E2E_BROWSER_CHANNEL as 'chrome' | 'msedge';
+  const chromePaths = [
+    process.env.LOCALAPPDATA && `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ].filter((p): p is string => !!p);
+  return chromePaths.some(p => existsSync(p)) ? 'chrome' : 'msedge';
+}
+
 test.use({
-  channel: 'chrome',
+  channel: resolveBrandChannel(),
   launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--no-proxy-server'] }
 });
 
@@ -80,4 +92,72 @@ test('假摄像头开播闭环：摄像头开播-WHIP推流-观众出画-弹幕-
     await hostCtx.close();
     await viewerCtx.close();
   }
+});
+
+test('三源独立全链路：麦克风单独开播→+摄像头→+屏幕共享→全关自动停播', async ({ page }) => {
+  test.setTimeout(180_000);
+  const ts = Date.now();
+
+  // 真 getDisplayMedia 在无头模式选不了源：3s 内选不出则回退「假屏+振荡器音轨」，
+  // 音频/视频轨都是真 MediaStreamTrack，混音接线（connectScreenAudio）走真实链路
+  await page.addInitScript(() => {
+    const real = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getDisplayMedia = (c?: DisplayMediaStreamOptions): Promise<MediaStream> =>
+      Promise.race<MediaStream>([
+        real(c),
+        new Promise<MediaStream>((_, rej) => setTimeout(() => rej(new Error('picker-timeout')), 3000)),
+      ]).catch(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640; canvas.height = 360;
+        const g = canvas.getContext('2d')!;
+        let i = 0;
+        setInterval(() => {
+          g.fillStyle = '#243447'; g.fillRect(0, 0, 640, 360);
+          g.fillStyle = '#e8eef5'; g.fillRect(60 + (i++ % 10) * 20, 70, 90, 90);
+        }, 200);
+        const videoTrack = canvas.captureStream(15).getVideoTracks()[0];
+        const ctx = new AudioContext();
+        const dst = ctx.createMediaStreamDestination();
+        const osc = ctx.createOscillator();
+        osc.connect(dst); osc.start();
+        return new MediaStream([videoTrack, dst.stream.getAudioTracks()[0]]);
+      });
+  });
+
+  await login(page, `e2e-3src-host-${ts}`, '三源主播', 'HOST');
+  await createAndEnter(page, `三源间-${ts}`);
+  await expect(page.locator('.meeting')).toBeVisible({ timeout: 15_000 });
+  const toolbar = page.locator('.meeting-toolbar');
+
+  // ── 1) 麦克风单独开播：SRS on_publish → 直播中；无画面源时显示文字垫 ──
+  await toolbar.getByRole('button', { name: '麦克风已关' }).click();
+  await expect(page.locator('.badge', { hasText: '直播中' }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.meeting-tag')).toContainText('麦克风直播中');
+
+  // ── 2) 直播中加摄像头：预览出画、文字垫消失、无报错（会话不重建） ──
+  await toolbar.getByRole('button', { name: '摄像头已关' }).click();
+  await expect(toolbar.getByRole('button', { name: '摄像头', exact: true })).toBeVisible();
+  await page.waitForFunction(() => {
+    const v = document.querySelector('.meeting video.meeting-src-video') as HTMLVideoElement | null;
+    return !!v && v.srcObject !== null && v.videoWidth > 0;
+  }, null, { timeout: 15_000, polling: 500 });
+  await expect(page.locator('.meeting-tag')).toHaveCount(0);
+  await expect(page.locator('.meeting .meeting-error')).toHaveCount(0);
+
+  // ── 3) 直播中加屏幕共享（带声音轨）：进入画中画合成，无报错 ──
+  await toolbar.getByRole('button', { name: '共享屏幕' }).click();
+  await expect(toolbar.getByRole('button', { name: '停止共享' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.meeting .meeting-error')).toHaveCount(0);
+
+  // ── 4) 停止共享（页面按钮 ≡ 浏览器"停止共享"） ──
+  await toolbar.getByRole('button', { name: '停止共享' }).click();
+  await expect(toolbar.getByRole('button', { name: '共享屏幕' })).toBeVisible();
+
+  // ── 5) 全关自动停播：关摄像头 + 麦克风静音 → WHIP DELETE → on_unpublish → 未开播 ──
+  await toolbar.getByRole('button', { name: '摄像头', exact: true }).click();
+  await expect(toolbar.getByRole('button', { name: '摄像头已关' })).toBeVisible();
+  await toolbar.getByRole('button', { name: '麦克风', exact: true }).click();
+  await expect(page.locator('.meeting .player-placeholder')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.badge', { hasText: '未开播' }).first()).toBeVisible({ timeout: 40_000 });
+  await expect(page.locator('.meeting .meeting-error')).toHaveCount(0);
 });
