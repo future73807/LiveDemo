@@ -144,10 +144,76 @@ test('三源独立全链路：麦克风单独开播→+摄像头→+屏幕共享
   await expect(page.locator('.meeting-tag')).toHaveCount(0);
   await expect(page.locator('.meeting .meeting-error')).toHaveCount(0);
 
+  // ── 2b) 麦克风静音/取消静音差分：发布音轨峰值 RMS 静音≈0、取消静音恢复 ──
+  // 假麦克风是间歇蜂鸣：用 4s 窗口取峰值；取消静音用"10s 内任意 250ms 窗出现信号"稳健断言
+  const peakRms = (windows = 16) => page.evaluate(async (windows) => {
+    const v = document.querySelector('.meeting video') as HTMLVideoElement | null;
+    const track = v?.srcObject?.getAudioTracks?.()[0];
+    if (!track) return -1;
+    const ac = new AudioContext();
+    await ac.resume().catch(() => {});   // 无头无手势时新建即 suspended，必须恢复才有数据
+    const src = ac.createMediaStreamSource(new MediaStream([track]));
+    const an = ac.createAnalyser(); an.fftSize = 2048;
+    src.connect(an);
+    let peak = 0;
+    for (let w = 0; w < windows; w++) {
+      await new Promise(r => setTimeout(r, 250));
+      const buf = new Float32Array(an.fftSize);
+      an.getFloatTimeDomainData(buf);
+      let sum = 0; for (const x of buf) sum += x * x;
+      peak = Math.max(peak, Math.sqrt(sum / buf.length));
+    }
+    await ac.close();
+    return peak;
+  }, windows);
+  const rmsUnmuted = await peakRms(60);   // 假麦克风蜂鸣有长静音期：15s 内等信号
+  await toolbar.getByRole('button', { name: '麦克风', exact: true }).click();
+  const rmsMuted = await peakRms(8);      // 增益 0 立即断流：静音期所有窗口都应≈0
+  await toolbar.getByRole('button', { name: '麦克风已关' }).click();
+  const rmsBack = await peakRms(40);      // 10s 内等蜂鸣回归
+  console.log('[3src] 麦克风 RMS 未静音:', rmsUnmuted.toFixed(4), '静音:', rmsMuted.toFixed(4), '恢复:', rmsBack.toFixed(4));
+  expect(rmsMuted, '静音后能量应归零').toBeLessThan(0.005);
+  // 蜂鸣间隙不规律：未静音阶段（含后续摄像头+麦同开窗口）任一窗口有信号即算通过
+  const rmsCamMic = await peakRms(16);    // 摄像头+麦同开 4s 再采样一次
+  const micFlowPeak = Math.max(rmsUnmuted, rmsBack, rmsCamMic);
+  console.log('[3src] 麦克风流动峰值:', micFlowPeak.toFixed(4));
+  expect(micFlowPeak, '未静音阶段应能采到麦克风信号').toBeGreaterThan(0.01);
+
   // ── 3) 直播中加屏幕共享（带声音轨）：进入画中画合成，无报错 ──
   await toolbar.getByRole('button', { name: '共享屏幕' }).click();
   await expect(toolbar.getByRole('button', { name: '停止共享' })).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('.meeting .meeting-error')).toHaveCount(0);
+
+  // ── 3b) 画中画合成像素断言：屏幕层 + 摄像头画中画边框都在画布上 ──
+  const pip = await page.evaluate(() => {
+    const c = document.querySelector('.meeting canvas') as HTMLCanvasElement | null;
+    if (!c) return null;
+    const g = c.getContext('2d')!;
+    const bw = 320, bh = Math.round(320 * 9 / 16);
+    const bx = c.width - bw - 24, by = c.height - bh - 24;
+    return {
+      screenLayer: g.getImageData(60, 70, 1, 1).data.join(','),
+      pipCenter: g.getImageData(bx + bw / 2, by + bh / 2, 1, 1).data.join(','),
+      pipBorder: g.getImageData(bx + 2, by + 2, 1, 1).data.join(',')
+    };
+  });
+  console.log('[3src] 画中画像素:', JSON.stringify(pip));
+  expect(pip, '合成画布应存在').not.toBeNull();
+  expect(pip!.pipBorder, '画中画应有描边（非纯黑）').not.toBe('0,0,0,0');
+
+  // ── 3c) 屏幕共享带系统声音：静音麦克风后发布音轨仍有屏幕声能量 ──
+  await toolbar.getByRole('button', { name: '麦克风', exact: true }).click();
+  const rmsScreenAudio = await peakRms();
+  await toolbar.getByRole('button', { name: '麦克风已关' }).click();
+  console.log('[3src] 麦静音后屏幕声 RMS:', rmsScreenAudio.toFixed(4));
+  expect(rmsScreenAudio, '屏幕共享声音应混入发布音轨').toBeGreaterThan(0.005);
+
+  // ── 3d) 服务端确认：媒体真实到达 SRS（在播流 + 收流字节） ──
+  const srs = await fetch('http://127.0.0.1:21985/api/v1/streams/').then(r => r.json());
+  const liveStreams = (srs.streams ?? []).filter((x: { publish?: { active?: boolean }; recv_bytes?: number }) =>
+    x.publish?.active && (x.recv_bytes ?? 0) > 0);
+  console.log('[3src] SRS 在播流:', JSON.stringify(liveStreams.map((x: { name: string; recv_bytes: number }) => ({ name: x.name, recv: x.recv_bytes }))));
+  expect(liveStreams.length, 'SRS 应有在播流').toBeGreaterThan(0);
 
   // ── 4) 停止共享（页面按钮 ≡ 浏览器"停止共享"） ──
   await toolbar.getByRole('button', { name: '停止共享' }).click();
