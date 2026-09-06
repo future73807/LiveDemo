@@ -14,6 +14,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   const resp = await fetch(`/api${path}`, { ...init, headers });
+  if (resp.status === 401 && token) {
+    // 会话失效（服务端数据重置/token 过期）：自动登出并广播，
+    // 避免页面卡在"已登录但所有请求 401"的死态（登录弹窗不出现）
+    clearToken();
+    tokenStorage.user = null;
+    window.dispatchEvent(new CustomEvent('livedemo:unauthorized'));
+  }
   const body = await resp.json().catch(() => ({})) as { code?: string; message?: string; data?: T };
   if (!resp.ok) throw new ApiError(resp.status, body.message ?? `请求失败(${resp.status})`);
   return body.data as T;

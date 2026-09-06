@@ -16,7 +16,12 @@ export default function HomePage() {
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
-    try { setRooms(await roomsApi.list()); } catch (e) { setError(e instanceof Error ? e.message : '加载失败'); }
+    try {
+      setRooms(await roomsApi.list());
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '加载失败');
+    }
   }, []);
 
   useEffect(() => {

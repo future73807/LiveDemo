@@ -6,7 +6,10 @@ import { whipPublish, whipStop, WhipSession } from '../realtime/whip';
  * 腾讯会议式开播：悬浮工具条独立控制 麦克风/摄像头/共享屏幕。
  * - 视频经画布合成后推单轨：摄像头与屏幕共享可同屏（屏幕全屏 + 摄像头画中画），
  *   开关任一画面源都只改画布内容，推流会话零闪断
- * - 音频经 WebAudio 混音成单轨：麦克风独立开关（可纯麦克风开播），屏幕共享可带系统声音
+ * - 音频按当前源组合重算应发轨道并 replaceTrack（参考成熟实践）：
+ *   屏幕声+麦克风=WebAudio 混音单轨；仅屏幕声=屏幕音轨直发；仅麦克风=麦克风轨直发；
+ *   无声=静音占位轨（保住音频 m-line，切换模式免重新协商）
+ * - 麦克风约束显式开回声抑制/降噪/自动增益；屏幕系统声约束关闭这三项（避免处理失真）
  */
 
 const CANVAS_W = 1280;
@@ -24,14 +27,17 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
 
   const sessionRef = useRef<WhipSession | null>(null);
   const whipRef = useRef('');
+  const audioSenderRef = useRef<RTCRtpSender | null>(null);
+  const silentTrackRef = useRef<MediaStreamTrack | null>(null);
+  const silentCtxRef = useRef<AudioContext | null>(null);
 
-  // 音频图：麦克风 / 屏幕声 各自增益后混入同一目的地
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  // 混音（仅"屏幕声+麦克风"同开时使用）
+  const mixCtxRef = useRef<AudioContext | null>(null);
   const mixDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
-  const micGainRef = useRef<GainNode | null>(null);
-  const screenGainRef = useRef<GainNode | null>(null);
+  const mixSourcesRef = useRef<MediaStreamAudioSourceNode[]>([]);
 
-  // 原始媒体流
+  // 原始媒体
+  const micTrackRef = useRef<MediaStreamTrack | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const camStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -39,7 +45,6 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
   const rafRef = useRef(0);
   const prevStatusRef = useRef<'IDLE' | 'LIVING' | null>(null);
 
-  // 状态镜像（同步读写，供合成循环与自动停播判断）
   const flags = useRef({ micOn: false, camOn: false, screenOn: false, publishing: false });
 
   const [publishing, setPublishing] = useState(false);
@@ -74,32 +79,26 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
   function cleanup() {
     if (sessionRef.current) { whipStop(sessionRef.current).catch(() => {}); sessionRef.current = null; }
     cancelAnimationFrame(rafRef.current);
-    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micTrackRef.current?.stop();
+    micTrackRef.current = null;
     micStreamRef.current = null;
     camStreamRef.current?.getTracks().forEach(t => t.stop());
-    screenStreamRef.current?.getTracks().forEach(t => t.stop());
     camStreamRef.current = null;
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
-    micGainRef.current?.disconnect();
-    screenGainRef.current?.disconnect();
-    micGainRef.current = null;
-    screenGainRef.current = null;
-    canvasTrackRef.current = null;
-    audioCtxRef.current?.close().catch(() => {});
-    audioCtxRef.current = null;
+    mixSourcesRef.current = [];
     mixDestRef.current = null;
+    mixCtxRef.current?.close().catch(() => {});
+    mixCtxRef.current = null;
+    silentTrackRef.current?.stop();
+    silentTrackRef.current = null;
+    silentCtxRef.current?.close().catch(() => {});
+    silentCtxRef.current = null;
+    canvasTrackRef.current = null;
+    audioSenderRef.current = null;
     flags.current = { micOn: false, camOn: false, screenOn: false, publishing: false };
     setPublishing(false); setMicOn(false); setCamOn(false); setScreenOn(false);
     if (mainVideoRef.current) mainVideoRef.current.srcObject = null;
-  }
-
-  function ensureAudioGraph() {
-    if (!audioCtxRef.current) {
-      const ctx = new AudioContext();
-      audioCtxRef.current = ctx;
-      mixDestRef.current = ctx.createMediaStreamDestination();
-    }
-    if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
   }
 
   /** 画布合成循环：屏幕全屏 / 摄像头全屏 / 双源画中画 / 纯黑（纯麦克风直播） */
@@ -146,45 +145,104 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
     return whipRef.current;
   }
 
-  /** 建立会话（画布视频轨 + 混音音轨）；已建立则只刷新预览 */
-  async function ensurePublish() {
-    startCompositor();
-    ensureAudioGraph();
-    if (!sessionRef.current) {
-      const url = await whipUrl();
-      const tracks = [canvasTrackRef.current!, mixDestRef.current!.stream.getAudioTracks()[0]];
-      sessionRef.current = await whipPublish(url, new MediaStream(tracks));
-      setFlag('publishing', true);
-    }
-    attachPreview();
+  /** 静音占位轨：无声模式也保留音频 m-line（ConstantSource 过 0 增益，参考成熟做法） */
+  function ensureSilentTrack(): MediaStreamTrack {
+    if (silentTrackRef.current) return silentTrackRef.current;
+    const ctx = new AudioContext();
+    silentCtxRef.current = ctx;
+    const src = ctx.createConstantSource();
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    const dst = ctx.createMediaStreamDestination();
+    src.connect(gain); gain.connect(dst);
+    src.start();
+    silentTrackRef.current = dst.stream.getAudioTracks()[0];
+    return silentTrackRef.current;
   }
 
-  function attachPreview() {
-    if (!mainVideoRef.current || !canvasTrackRef.current || !mixDestRef.current) return;
-    mainVideoRef.current.srcObject = new MediaStream([
-      canvasTrackRef.current,
-      mixDestRef.current.stream.getAudioTracks()[0]
-    ]);
+  /** 按当前源组合重算混音器（仅"屏幕声+麦克风"同开时走混音） */
+  function rebuildMixer(screenAudio: MediaStreamTrack | null, mic: MediaStreamTrack | null) {
+    mixSourcesRef.current.forEach(node => { try { node.disconnect(); } catch (_) {} });
+    mixSourcesRef.current = [];
+    if (!screenAudio && !mic) return;
+    if (!mixCtxRef.current) mixCtxRef.current = new AudioContext();
+    if (!mixDestRef.current) mixDestRef.current = mixCtxRef.current.createMediaStreamDestination();
+    const ctx = mixCtxRef.current;
+    for (const t of [screenAudio, mic].filter(Boolean) as MediaStreamTrack[]) {
+      const node = ctx.createMediaStreamSource(new MediaStream([t]));
+      node.connect(mixDestRef.current);
+      mixSourcesRef.current.push(node);
+    }
   }
+
+  /** 按源组合计算当前应发布的音频轨：双源=混音单轨，单源=直发，无源=静音占位 */
+  function currentAudioTrack(): MediaStreamTrack {
+    const screenAudio = flags.current.screenOn
+      ? screenStreamRef.current?.getAudioTracks()[0] ?? null : null;
+    const mic = flags.current.micOn ? micTrackRef.current : null;
+    if (screenAudio && mic) {
+      rebuildMixer(screenAudio, mic);
+      return mixDestRef.current!.stream.getAudioTracks()[0];
+    }
+    rebuildMixer(null, null);
+    if (screenAudio) return screenAudio;
+    if (mic) return mic;
+    return ensureSilentTrack();
+  }
+
+  /** 组装/更新发布轨：音频按源组合 replaceTrack（免重新协商），视频为合成画布 */
+  async function ensurePublish() {
+    startCompositor();
+    const audio = currentAudioTrack();
+    if (!sessionRef.current) {
+      const url = await whipUrl();
+      sessionRef.current = await whipPublish(url, new MediaStream([canvasTrackRef.current!, audio]));
+      const senders = sessionRef.current.pc.getSenders();
+      audioSenderRef.current = senders.find(s => s.track?.kind === 'audio') ?? null;
+      // 屏幕内容对分辨率敏感：固定分辨率优先、只降帧不降清晰度（参考成熟实践）
+      const vSender = senders.find(s => s.track?.kind === 'video');
+      if (vSender) {
+        try {
+          const params = vSender.getParameters();
+          params.degradationPreference = 'maintain-resolution';
+          if (params.encodings?.length) {
+            params.encodings[0].maxBitrate = 2_500_000;
+            params.encodings[0].maxFramerate = 30;
+          }
+          await vSender.setParameters(params);
+        } catch (_) { /* SRS 不接受时忽略 */ }
+      }
+      setFlag('publishing', true);
+    } else {
+      await audioSenderRef.current?.replaceTrack(audio).catch(() => {});
+    }
+    attachPreview(audio);
+  }
+
+  function attachPreview(audio: MediaStreamTrack) {
+    if (!mainVideoRef.current || !canvasTrackRef.current) return;
+    mainVideoRef.current.srcObject = new MediaStream([canvasTrackRef.current, audio]);
+  }
+
+  /** 麦克风约束：回声抑制/降噪/自动增益，避免屏幕声被麦克风二次采集造成回音 */
+  const MIC_CONSTRAINTS: MediaTrackConstraints = {
+    echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1
+  };
 
   async function toggleMic() {
     setError('');
     if (!mediaOk) { setError(SECURE_HINT); return; }
     try {
-      ensureAudioGraph();
-      if (micOn && micGainRef.current) {
-        micGainRef.current.gain.value = 0;   // 静音保留链路
+      if (micOn) {
         setFlag('micOn', false);
+        if (micTrackRef.current) micTrackRef.current.enabled = false;
       } else {
-        if (!micGainRef.current) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (!micTrackRef.current) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
           micStreamRef.current = stream;
-          const src = audioCtxRef.current!.createMediaStreamSource(stream);
-          const gain = audioCtxRef.current!.createGain();
-          src.connect(gain).connect(mixDestRef.current!);
-          micGainRef.current = gain;
+          micTrackRef.current = stream.getAudioTracks()[0];
         }
-        micGainRef.current.gain.value = 1;
+        micTrackRef.current.enabled = true;
         setFlag('micOn', true);
       }
       await ensurePublish();
@@ -235,9 +293,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
           screenVideoRef.current.srcObject = display;
           await screenVideoRef.current.play().catch(() => {});
         }
-        ensureAudioGraph();
-        connectScreenAudio(display.getAudioTracks()[0]);
-        screenTrackEnded(screenStreamRef.current.getVideoTracks()[0]);
+        screenTrackEnded(display.getVideoTracks()[0]);
         setFlag('screenOn', true);
       }
       await ensurePublish();
@@ -253,21 +309,8 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
     });
   }
 
-  /** 屏幕声接线：旧节点连的是上一轮已结束的轨道，每次共享必须断开重建，否则二次共享无声 */
-  function connectScreenAudio(track: MediaStreamTrack | undefined) {
-    screenGainRef.current?.disconnect();
-    screenGainRef.current = null;
-    if (!track || !audioCtxRef.current || !mixDestRef.current) return;
-    const src = audioCtxRef.current.createMediaStreamSource(new MediaStream([track]));
-    const gain = audioCtxRef.current.createGain();
-    src.connect(gain).connect(mixDestRef.current);
-    screenGainRef.current = gain;
-  }
-
   async function stopScreen() {
     setFlag('screenOn', false);
-    screenGainRef.current?.disconnect();
-    screenGainRef.current = null;
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
     if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
@@ -285,17 +328,23 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
       sessionRef.current = null;
     }
     cancelAnimationFrame(rafRef.current);
-    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micTrackRef.current?.stop();
+    micTrackRef.current = null;
     micStreamRef.current = null;
-    camStreamRef.current?.getVideoTracks().forEach(t => t.stop());
+    camStreamRef.current?.getTracks().forEach(t => t.stop());
     camStreamRef.current = null;
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
-    micGainRef.current?.disconnect();
-    screenGainRef.current?.disconnect();
-    micGainRef.current = null;
-    screenGainRef.current = null;
+    mixSourcesRef.current = [];
+    mixDestRef.current = null;
+    mixCtxRef.current?.close().catch(() => {});
+    mixCtxRef.current = null;
+    silentTrackRef.current?.stop();
+    silentTrackRef.current = null;
+    silentCtxRef.current?.close().catch(() => {});
+    silentCtxRef.current = null;
     canvasTrackRef.current = null;
+    audioSenderRef.current = null;
     setFlag('publishing', false);
     setFlag('camOn', false);
     setFlag('screenOn', false);
@@ -313,7 +362,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
         <div className="player-placeholder">
           <span className="ph-icon">LIVE</span>
           开启麦克风、摄像头或共享屏幕，直接开播
-          <span className="muted" style={{ fontSize: 12 }}>摄像头与屏幕可同屏（画中画）· 屏幕共享可带系统声音</span>
+          <span className="muted" style={{ fontSize: 12 }}>摄像头与屏幕可同屏（画中画）· 屏幕共享可带系统声音 · 麦克风可单独开播</span>
           {!mediaOk && (
             <span className="meeting-secure-warn">
               当前地址（http://{location.host}）不是安全上下文，浏览器已禁用摄像头/麦克风/屏幕共享。

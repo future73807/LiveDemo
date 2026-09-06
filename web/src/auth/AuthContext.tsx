@@ -66,6 +66,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch(() => { clearToken(); tokenStorage.user = null; setEmbedAuthFailed(true); });
   }, []);
 
+  // API 层广播 401（会话失效）：清登录态让登录弹窗回归，而不是卡在"已登录但全 401"的死态
+  useEffect(() => {
+    const onUnauthorized = () => {
+      clearToken();
+      tokenStorage.user = null;
+      setUser(null);
+    };
+    window.addEventListener('livedemo:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('livedemo:unauthorized', onUnauthorized);
+  }, []);
+
   const value = useMemo<AuthCtx>(() => {
     function adoptSession(token: string, u: AuthUser) {
       setToken(token);
