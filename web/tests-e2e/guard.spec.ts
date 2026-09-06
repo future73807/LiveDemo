@@ -3,6 +3,11 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 
+// 假摄像头/假麦克风：无真实设备的浏览器也能验证开播链路
+test.use({
+  launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--no-proxy-server'] }
+});
+
 async function apiLogin(request: APIRequestContext) {
   const r = await request.post('/api/auth/login', { data: { username: 'admin', password: 'admin123456' } });
   return (await r.json()).data.token as string;
@@ -53,4 +58,23 @@ test('嵌入模式 token 失效显示提示而非白屏', async ({ page }) => {
   await page.goto(`${BASE}/rooms/1?embed=1&token=INVALID.TOKEN.X`);
   await page.locator('.embed-denied').waitFor({ timeout: 10000 });
   await expect(page.locator('.embed-denied')).toContainText('登录态已失效');
+});
+
+test('纯麦克风开播：无摄像头也能转直播中（画布垫帧）', async ({ page }) => {
+  test.setTimeout(60_000);
+  const stamp = Date.now();
+  await login(page, `gd-mic-${stamp}`, '纯麦主播', 'HOST');
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: '创建房间' }).click();
+  await page.waitForSelector('.dialog');
+  await page.locator('.dialog .field input').fill(`纯麦间-${stamp}`);
+  await page.locator('.dialog').getByRole('button', { name: '创建', exact: true }).click();
+  await page.getByRole('button', { name: '进入直播间' }).click();
+  await page.waitForSelector('.meeting', { timeout: 15000 });
+  await page.locator('.meeting-toolbar button', { hasText: '麦克风已关' }).click();
+  await page.waitForFunction(() => {
+    const v = document.querySelector('.meeting video');
+    return !!v && v.srcObject !== null && v.videoWidth > 0;
+  }, null, { timeout: 20000 });
+  await expect(page.locator('.room-header .badge').first()).toContainText('直播中', { timeout: 20000 });
 });
