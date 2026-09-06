@@ -222,8 +222,14 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
       if (screenOn) {
         await stopScreen();
       } else {
-        // audio:true：勾选"同时分享系统声音"时带上系统/标签页声音，混入同一音轨
-        const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        // audio:true + systemAudio:include：Chrome 共享弹窗默认勾选"同时分享系统声音"
+        const display = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+          systemAudio: 'include',
+          selfBrowserSurface: 'exclude',
+          surfaceSwitching: 'include',
+        } as DisplayMediaStreamOptions);
         screenStreamRef.current = display;
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = display;
