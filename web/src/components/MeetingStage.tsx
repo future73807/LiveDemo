@@ -229,6 +229,38 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
     echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1
   };
 
+/** 媒体设备错误 → 用户能看懂并知道怎么处理的提示（真实环境最常见故障源） */
+function mediaErrorHint(e: unknown, what: string): string {
+  const name = e instanceof DOMException ? e.name : '';
+  switch (name) {
+    case 'NotAllowedError':
+      return `${what}权限被拒绝：点击地址栏左侧的锁/调音器图标，将${what}设为「允许」后重试`;
+    case 'NotFoundError':
+      return `未检测到可用的${what}设备（可先用「共享屏幕」开播，系统声音不依赖麦克风）`;
+    case 'NotReadableError':
+      return `${what}无响应或被其他应用占用，请重试或关闭占用它的程序`;
+    default:
+      return e instanceof Error ? `${what}打开失败：${e.message}` : `${what}打开失败`;
+  }
+}
+
+/**
+ * 带设备预检与超时的 getUserMedia：
+ * 真实环境无输入设备时 Chrome 的请求可能既不成功也不失败（挂死），
+ * 必须预检设备列表 + 限时兜底，保证用户点了必出结果（开播或明确报错）
+ */
+async function safeGetUserMedia(constraints: MediaStreamConstraints, kind: 'audioinput' | 'videoinput'): Promise<MediaStream> {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  if (!devices.some(d => d.kind === kind)) {
+    throw new DOMException(kind === 'audioinput' ? 'no audio input device' : 'no camera device', 'NotFoundError');
+  }
+  return Promise.race([
+    navigator.mediaDevices.getUserMedia(constraints),
+    new Promise<MediaStream>((_, reject) =>
+      setTimeout(() => reject(new DOMException('device not responding', 'NotReadableError')), 6000)),
+  ]);
+}
+
   async function toggleMic() {
     setError('');
     if (!mediaOk) { setError(SECURE_HINT); return; }
@@ -238,7 +270,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
         if (micTrackRef.current) micTrackRef.current.enabled = false;
       } else {
         if (!micTrackRef.current) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+          const stream = await safeGetUserMedia({ audio: MIC_CONSTRAINTS }, 'audioinput');
           micStreamRef.current = stream;
           micTrackRef.current = stream.getAudioTracks()[0];
         }
@@ -247,7 +279,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
       }
       await ensurePublish();
       maybeAutoStop();
-    } catch (e) { setError(e instanceof Error ? e.message : '打开麦克风失败（需 HTTPS 环境并授权）'); }
+    } catch (e) { setError(mediaErrorHint(e, '麦克风')); }
   }
 
   async function toggleCamera() {
@@ -260,7 +292,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
         if (camVideoRef.current) camVideoRef.current.srcObject = null;
         setFlag('camOn', false);
       } else {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await safeGetUserMedia({ video: true }, 'videoinput');
         camStreamRef.current = stream;
         if (camVideoRef.current) {
           camVideoRef.current.srcObject = stream;
@@ -270,7 +302,7 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
       }
       await ensurePublish();
       maybeAutoStop();
-    } catch (e) { setError(e instanceof Error ? e.message : '打开摄像头失败（需 HTTPS 环境并授权）'); }
+    } catch (e) { setError(mediaErrorHint(e, '摄像头')); }
   }
 
   async function toggleScreen() {
@@ -295,10 +327,20 @@ export default function MeetingStage({ roomId, roomStatus, onEnded }: {
         }
         screenTrackEnded(display.getVideoTracks()[0]);
         setFlag('screenOn', true);
+        // 系统声音只在共享「整个屏幕」且勾选复选框时才有（共享窗口/标签页无此选项）
+        if (display.getAudioTracks().length === 0) {
+          setError('本次共享未包含系统声音：如需系统声音，请共享「整个屏幕」并勾选「同时分享系统声音」；麦克风声音不受影响');
+        }
       }
       await ensurePublish();
       maybeAutoStop();
-    } catch (e) { setError(e instanceof Error ? e.message : '打开屏幕共享失败（需 HTTPS 环境并授权）'); }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'NotAllowedError') {
+        setError('屏幕共享被取消或权限被拒绝；如需系统声音，请共享「整个屏幕」并勾选「同时分享系统声音」');
+      } else {
+        setError(mediaErrorHint(e, '屏幕共享'));
+      }
+    }
   }
 
   /** 浏览器"停止共享"按钮与页面按钮等价 */
